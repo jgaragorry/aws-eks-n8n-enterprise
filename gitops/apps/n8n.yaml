@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: n8n-workflow-engine
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  source:
+    repoURL: https://cathywise.github.io/n8n-helm-chart
+    chart: n8n
+    targetRevision: 0.24.0
+    helm:
+      values: |
+        config:
+          database:
+            type: postgresdb
+            postgresdb:
+              host: n8n-database-postgresql.n8n-system.svc.cluster.local
+              port: 5432
+              database: n8n_db
+              user: n8n_user
+              password: "StrongPassword123!"
+          generic:
+            timezone: "America/Santiago"
+        persistence:
+          enabled: true
+          size: 5Gi
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1024Mi
+        ingress:
+          enabled: true
+          annotations:
+            kubernetes.io/ingress.class: alb
+            alb.ingress.kubernetes.io/scheme: internet-facing
+            alb.ingress.kubernetes.io/target-type: ip
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: n8n-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
