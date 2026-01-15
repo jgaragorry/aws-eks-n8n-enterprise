@@ -10,9 +10,10 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://cathywise.github.io/n8n-helm-chart
+    # 👇 CAMBIO CLAVE: Usamos el repositorio oficial de la comunidad
+    repoURL: https://community-charts.github.io/helm-charts
     chart: n8n
-    targetRevision: 0.24.0
+    targetRevision: 1.15.7  # Versión moderna y estable
     helm:
       values: |
         config:
@@ -49,3 +50,5 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
