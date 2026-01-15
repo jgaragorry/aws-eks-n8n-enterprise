@@ -3,8 +3,8 @@ kind: Application
 metadata:
   name: n8n-database
   namespace: argocd
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
   source:
@@ -12,22 +12,22 @@ spec:
     chart: postgresql
     targetRevision: 13.2.24
     helm:
-      values: |
-        auth:
-          username: n8n_user
-          database: n8n_db
-          postgresPassword: "StrongPassword123!"
-        primary:
-          persistence:
-            enabled: true
-            size: 8Gi
-          resources:
-            requests:
-              cpu: 250m
-              memory: 256Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
+      parameters:
+        - name: global.postgresql.auth.postgresPassword
+          value: "StrongPassword123!"
+        - name: global.postgresql.auth.username
+          value: "n8n_user"
+        - name: global.postgresql.auth.password
+          value: "StrongPassword123!"
+        - name: global.postgresql.auth.database
+          value: "n8n_db"
+        - name: primary.persistence.enabled
+          value: "true"
+        - name: primary.persistence.size
+          value: "8Gi"
+        # 👇 ESTA ES LA CORRECCIÓN: Forzamos una imagen que SÍ existe
+        - name: image.tag
+          value: "16"
   destination:
     server: https://kubernetes.default.svc
     namespace: n8n-system
