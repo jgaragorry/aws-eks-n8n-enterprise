@@ -25,9 +25,14 @@ spec:
           value: "true"
         - name: primary.persistence.size
           value: "8Gi"
-        # 👇 CORRECCIÓN: Usamos el tag "Floating" de Debian 12 que SÍ existe
+        
+        # 👇 LA SOLUCIÓN DEFINITIVA (AWS ECR Public)
+        - name: image.registry
+          value: "public.ecr.aws"
+        - name: image.repository
+          value: "bitnami/postgresql"
         - name: image.tag
-          value: "16-debian-12"
+          value: "16" 
   destination:
     server: https://kubernetes.default.svc
     namespace: n8n-system
