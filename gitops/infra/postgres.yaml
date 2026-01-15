@@ -25,9 +25,9 @@ spec:
           value: "true"
         - name: primary.persistence.size
           value: "8Gi"
-        # 👇 ESTA ES LA CORRECCIÓN: Forzamos una imagen que SÍ existe
+        # 👇 CORRECCIÓN: Usamos el tag "Floating" de Debian 12 que SÍ existe
         - name: image.tag
-          value: "16"
+          value: "16-debian-12"
   destination:
     server: https://kubernetes.default.svc
     namespace: n8n-system
