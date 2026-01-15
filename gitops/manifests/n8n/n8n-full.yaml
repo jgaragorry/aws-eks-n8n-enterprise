@@ -39,6 +39,9 @@ spec:
               value: "StrongPassword123!"
             - name: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
               value: "true"
+            # 👇 LA LLAVE MAESTRA PARA HTTP
+            - name: N8N_SECURE_COOKIE
+              value: "false"
           resources:
             requests:
               memory: "512Mi"

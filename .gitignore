@@ -1,3 +1,74 @@
-**/.terragrunt-cache
+# ==============================================================================
+# 🔒 GITIGNORE MAESTRO - AWS EKS ENTERPRISE
+# ==============================================================================
+
+# --- TERRAFORM & TERRAGRUNT (CRÍTICO) ---
+# El estado local contiene secretos en texto plano. ¡NUNCA SUBIR!
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Descargas de módulos y plugins (binarios pesados)
+.terraform/
+.terraform.lock.hcl  # Opcional: Algunos equipos lo suben, pero si usas diferentes OS, mejor ignorarlo.
+
+# Caché de Terragrunt
+.terragrunt-cache/
+.terragrunt-cache*/
+
+# Archivos de variables con secretos (passwords, keys)
+*.tfvars
+*.tfvars.json
+# Excepción: Puedes permitir example.tfvars si no tiene datos reales
+!example.tfvars
+
+# Logs de fallos
+crash.log
+crash.*.log
+
+# Archivos de anulación (Overrides) de Terraform
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# --- AWS & CREDENCIALES ---
+# Por si acaso alguien guarda credenciales locales (mala práctica, pero pasa)
+.aws/
+credentials
+config
+*.pem
+*.key
+*.pub
+
+# --- KUBERNETES ---
+# Archivos kubeconfig generados localmente
+kubeconfig
+.kube/
+config
+
+# --- SCRIPTS FORENSES (RESIDUOS) ---
+# Evitar subir los JSON temporales que generan los scripts de limpieza
+*_ingress.json
+*_egress.json
+iam_policy.json
+trust.json
+
+# --- IDE & OS (BASURA DEL SISTEMA) ---
+.DS_Store          # Mac
+Thumbs.db          # Windows
+.vscode/           # VS Code
+.idea/             # IntelliJ/PyCharm
+*.swp              # Vim
+
+# --- LOGS GENERALES ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- N8N DATA ---
+# Si alguna vez pruebas n8n localmente
+.n8n/**/.terragrunt-cache
 **/.terraform
 **/.terraform.lock.hcl
