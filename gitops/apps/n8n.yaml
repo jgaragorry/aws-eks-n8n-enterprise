@@ -10,39 +10,10 @@ metadata:
 spec:
   project: default
   source:
-    # 👇 CAMBIO CLAVE: Usamos el repositorio oficial de la comunidad
-    repoURL: https://community-charts.github.io/helm-charts
-    chart: n8n
-    targetRevision: 1.15.7  # Versión moderna y estable
-    helm:
-      values: |
-        config:
-          database:
-            type: postgresdb
-            postgresdb:
-              host: n8n-database-postgresql.n8n-system.svc.cluster.local
-              port: 5432
-              database: n8n_db
-              user: n8n_user
-              password: "StrongPassword123!"
-          generic:
-            timezone: "America/Santiago"
-        persistence:
-          enabled: true
-          size: 5Gi
-        resources:
-          requests:
-            cpu: 200m
-            memory: 512Mi
-          limits:
-            cpu: 1000m
-            memory: 1024Mi
-        ingress:
-          enabled: true
-          annotations:
-            kubernetes.io/ingress.class: alb
-            alb.ingress.kubernetes.io/scheme: internet-facing
-            alb.ingress.kubernetes.io/target-type: ip
+    # 👇 CAMBIO CLAVE: Apuntamos a TU propio repo, no a Helm externo
+    repoURL: https://github.com/jgaragorry/aws-eks-n8n-enterprise.git
+    targetRevision: main
+    path: gitops/manifests/n8n  # Carpeta donde guardamos el YAML recién creado
   destination:
     server: https://kubernetes.default.svc
     namespace: n8n-system

@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: n8n-enterprise-platform
+  namespace: argocd
+spec:
+  project: default
+  source:
+    # 👇 Asegúrate de que este sea TU usuario de GitHub correcto
+    repoURL: https://github.com/jgaragorry/aws-eks-n8n-enterprise.git
+    targetRevision: main
+    path: gitops
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

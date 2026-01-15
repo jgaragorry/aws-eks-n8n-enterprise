@@ -8,7 +8,6 @@ terraform {
 
 dependency "vpc" {
   config_path = "../vpc"
-  
   mock_outputs = {
     vpc_id          = "vpc-fake-id"
     private_subnets = ["subnet-fake-1", "subnet-fake-2"]
@@ -21,14 +20,21 @@ inputs = {
   environment     = "dev"
   cluster_version = "1.29"
 
-  # 💰 FINOPS: Configuración Spot para máximo ahorro en Dev
-  # Usamos t3.medium para soportar ArgoCD + Apps cómodamente
-  instance_types = ["t3.medium"] 
+  # Configuración Spot (FinOps)
+  instance_types = ["t3.medium"]
   min_size       = 1
   max_size       = 2
-  desired_size   = 1 # Empezamos con 1 nodo
-  
+  desired_size   = 1
+
   # Red
   vpc_id     = dependency.vpc.outputs.vpc_id
   subnet_ids = dependency.vpc.outputs.private_subnets
+
+  # 👇 LA SECCIÓN MÁGICA (Driver)
+  cluster_addons = {
+    coredns = { most_recent = true }
+    kube-proxy = { most_recent = true }
+    vpc-cni = { most_recent = true }
+    aws-ebs-csi-driver = { most_recent = true }  # <--- ESTO ES LO NUEVO
+  }
 }
