@@ -15,9 +15,9 @@ La solución sigue una arquitectura de **Hub-and-Spoke** simplificada dentro de 
 graph TB
     subgraph "AWS Cloud (us-east-1)"
         subgraph "VPC (10.0.0.0/16)"
-            ALB[Application Load Balancer]
-            NAT[NAT Gateway]
-            IGW[Internet Gateway]
+            ALB["Application Load Balancer"]
+            NAT["NAT Gateway"]
+            IGW["Internet Gateway"]
             
             subgraph "Public Subnets"
                 ALB
@@ -25,15 +25,15 @@ graph TB
             end
             
             subgraph "Private Subnets"
-                EKS_Control[EKS Control Plane]
-                Nodes[Worker Nodes (EC2)]
+                EKS_Control["EKS Control Plane"]
+                Nodes["Worker Nodes (EC2)"]
             end
         end
     end
 
-    User -->|HTTPS| ALB
-    ALB -->|Tráfico Interno| Nodes
-    Nodes -->|Salida a Internet| NAT --> IGW
+    User["Usuario 🌐"] -->|HTTPS| ALB
+    ALB -->|"Tráfico Interno"| Nodes
+    Nodes -->|"Salida a Internet"| NAT --> IGW
 ```
 
 ---
