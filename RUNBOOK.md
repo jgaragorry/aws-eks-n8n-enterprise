@@ -8,7 +8,7 @@
 
 **Autor:** Jose Garagorry & Gemini AI | **Nivel:** Enterprise Arch
 
-Este documento es la **Guía Maestra de Ejecución**. Contiene cada paso necesario para levantar, configurar, probar y destruir la infraestructura, garantizando el **Cero Absoluto** en costos al finalizar.
+Este documento es la **Guía Maestra de Ejecución**. Contiene cada paso necesario para levantar, configurar, probar y destruir la arquitectura, garantizando el **Cero Absoluto** en costos al finalizar.
 
 ---
 
@@ -108,18 +108,26 @@ kubectl get ingress -n n8n-system --watch
 ## 🍒 Fase 6: La Prueba de Fuego (Webhook Test)
 **Objetivo:** Validar flujo de tráfico externo al cluster.
 
-1. Acceder a la URL de Ingress en el navegador.
-2. Crear un Workflow: 
-   - Nodo Webhook (GET /estado) 
-   - Nodo Respond to Webhook (JSON: `{"status": "ready"}`)
-3. Probar: `http://<DNS-ALB>/webhook-test/estado`
+### 1. Obtención de URL
+Ejecuta `kubectl get ingress -n n8n-system` y copia el valor de **ADDRESS**.
+
+Accede a dicha URL en tu navegador.
+
+### 2. Configuración en n8n
+- **Nodo Webhook:** Método `GET` | Path `estado` | Respond: "Using 'Respond to Webhook' Node".
+- **Nodo Respond to Webhook:** En Response Body pega: `{"mensaje": "¡Hola Jose! Cluster VIVO 🤖🚀"}`.
+
+### 3. Ejecución
+- Haz clic en **"Execute Workflow"**.
+- Abre en el navegador: `http://<TU-ADDRESS-ALB>/webhook-test/estado`.
+- **Éxito:** Debes ver el JSON y el workflow en verde.
 
 ---
 
 ## 💀 Fase 7: Protocolo de Destrucción Forense (FinOps)
 **Objetivo:** Eliminación total de recursos facturables.
 
-### 7.1 Limpieza de K8s
+### 7.1 Limpieza de K8s (ALB y EBS)
 ```bash
 kubectl delete ingress --all -A
 kubectl delete pvc --all -A
