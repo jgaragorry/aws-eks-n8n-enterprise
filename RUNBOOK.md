@@ -1,7 +1,7 @@
 # 🚀 RUNBOOK MASTER: Despliegue n8n Enterprise en AWS EKS
 
 ![Status](https://img.shields.io/badge/STATUS-PRODUCCIÓN-success?style=for-the-badge&logo=checkmarx)
-![Version](https://img.shields.io/badge/VERSION-2.2.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/VERSION-2.3.0-blue?style=for-the-badge)
 ![FinOps](https://img.shields.io/badge/FINOPS-CERTIFIED-red?style=for-the-badge&logo=moneygram)
 ![AWS](https://img.shields.io/badge/AWS-EKS-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![GitOps](https://img.shields.io/badge/GITOPS-ARGOCD-orange?style=for-the-badge&logo=argo)
@@ -53,7 +53,7 @@ aws sts get-caller-identity
 
 **Ejecución:**
 ```bash
-cd iac/live/n8n-ent/dev/vpc
+cd iac/live/dev/vpc
 terragrunt apply -auto-approve
 ```
 
@@ -118,9 +118,9 @@ Accede a dicha URL en tu navegador.
 - **Nodo Respond to Webhook:** En Response Body pega: `{"mensaje": "¡Hola Jose! Cluster VIVO 🤖🚀"}`.
 
 ### 3. Ejecución
-- Haz clic en **"Execute Workflow"**.
+- Haz clic en **"Execute Workflow"** en n8n.
 - Abre en el navegador: `http://<TU-ADDRESS-ALB>/webhook-test/estado`.
-- **Éxito:** Debes ver el JSON y el workflow en verde.
+- **Éxito:** Debes ver el JSON en pantalla y el workflow ponerse en verde.
 
 ---
 
@@ -135,11 +135,11 @@ kubectl delete pvc --all -A
 
 ### 7.2 Destrucción de Infraestructura Core
 ```bash
-cd iac/live/n8n-ent/dev/eks && terragrunt destroy -auto-approve
+cd iac/live/dev/eks && terragrunt destroy -auto-approve
 cd ../vpc && terragrunt destroy -auto-approve
 ```
 
-### 7.3 Extracción de VPC (Fuerza Bruta)
+### 7.3 Extracción Quirúrgica de VPC (Si hay bloqueo)
 **Uso exclusivo si la VPC queda bloqueada por dependencias residuales.**
 ```bash
 ./scripts/surgical_vpc_extraction.sh <VPC_ID_DE_AUDITORIA>
