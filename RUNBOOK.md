@@ -1,14 +1,14 @@
 # 🚀 RUNBOOK MASTER: Despliegue n8n Enterprise en AWS EKS
 
 ![Status](https://img.shields.io/badge/STATUS-PRODUCCIÓN-success?style=for-the-badge&logo=checkmarx)
-![Version](https://img.shields.io/badge/VERSION-2.6.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/VERSION-2.7.0-blue?style=for-the-badge)
 ![FinOps](https://img.shields.io/badge/FINOPS-CERTIFIED-red?style=for-the-badge&logo=moneygram)
 ![AWS](https://img.shields.io/badge/AWS-EKS-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![GitOps](https://img.shields.io/badge/GITOPS-ARGOCD-orange?style=for-the-badge&logo=argo)
 
 **Autor:** Jose Garagorry & Gemini AI | **Nivel:** Enterprise Arch
 
-Este documento es la **Guía Maestra Única**. El orden de ejecución es crítico para asegurar que los permisos de AWS y la base de datos estén listos antes de que n8n intente arrancar.
+Este documento es la **Guía Maestra Única**. El orden de ejecución es atómico: cualquier salto en la configuración de IAM o en la secuencia de la base de datos resultará en fallos de despliegue.
 
 ---
 
@@ -25,21 +25,20 @@ Este documento es la **Guía Maestra Única**. El orden de ejecución es crític
 ---
 
 ## 🛠️ Fase 0: Preparación del Entorno
-**Objetivo:** Instalar herramientas de gestión de identidad.
+**Objetivo:** Instalar herramientas de gestión de clúster e identidad.
 ```bash
-# Instalación de eksctl (Esencial para OIDC)
+# Instalación de eksctl (Esencial para OIDC e IAM Roles for Service Accounts)
 curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
 sudo mv /tmp/eksctl /usr/local/bin
 
-# Validación
+# Validación de acceso a AWS
 aws sts get-caller-identity
-eksctl version
 ```
 
 ---
 
 ## 📦 Fase 1: Backend de Estado
-**Objetivo:** Crear S3 + DynamoDB para el estado persistente de Terraform.
+**Objetivo:** S3 y DynamoDB para persistencia de Terragrunt.
 ```bash
 ./scripts/setup_backend.sh
 ./scripts/check_backend.sh
@@ -48,7 +47,7 @@ eksctl version
 ---
 
 ## 🌐 Fase 2: Infraestructura de Red (VPC)
-**Objetivo:** Configurar VPC, Subnets y NAT Gateways.
+**Objetivo:** Desplegar la red segmentada en AWS.
 ```bash
 cd iac/live/dev/vpc
 terragrunt apply -auto-approve
@@ -57,17 +56,19 @@ terragrunt apply -auto-approve
 ---
 
 ## ☸️ Fase 3: Cómputo (Cluster EKS)
-**Objetivo:** Levantar el Cluster Kubernetes y Worker Nodes.
+**Objetivo:** Levantar el plano de control y nodos de trabajo.
 ```bash
 cd ../eks
 terragrunt apply -auto-approve
+
+# Actualizar Kubeconfig para acceso local
 aws eks update-kubeconfig --name eks-gitops-dev --region us-east-1
 ```
 
 ---
 
 ## 🏗️ Fase 4: Plataforma (Identidad y Tráfico)
-**Objetivo:** Vincular K8s con AWS y habilitar el Load Balancer.
+**Objetivo:** Configurar el controlador de carga y la identidad del clúster.
 
 ### 4.1: Vinculación OIDC
 ```bash
@@ -75,19 +76,19 @@ eksctl utils associate-iam-oidc-provider --cluster eks-gitops-dev --approve
 ```
 
 ### 4.2: Inyección de Permisos IAM (Solución AccessDenied)
-**Este paso descarga e inyecta la política oficial necesaria para que el balanceador obtenga ADDRESS.**
+**Vital para que el AWS Load Balancer Controller pueda crear el Ingress ADDRESS.**
 ```bash
 cd ../../../
 curl -o iam_policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
 aws iam put-role-policy --role-name AmazonEKSLoadBalancerControllerRole --policy-name ALBControllerPolicy --policy-document file://iam_policy.json
 ```
 
-### 4.3: Controladores
+### 4.3: Despliegue de Controladores
 ```bash
 ./scripts/setup_alb_controller.sh
 kubectl rollout restart deployment aws-load-balancer-controller -n kube-system
 
-# ArgoCD
+# Instalación de ArgoCD
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 ```
@@ -95,25 +96,59 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/st
 ---
 
 ## 🚀 Fase 5: Despliegue de Aplicación (n8n)
-**Objetivo:** Levantar Base de Datos y n8n en orden secuencial.
+**Objetivo:** Levantar n8n con persistencia PostgreSQL sincronizada.
 
-### 5.1: Persistencia (PostgreSQL)
-**Se debe aplicar antes para evitar que n8n falle al no encontrar el host de la DB.**
+### 5.1: Base de Datos (PostgreSQL)
+**Inyección de configuración validada (User: n8n_user / Pass: StrongPassword123!).**
 ```bash
-kubectl apply -f gitops/apps/database.yaml 
-# Esperar a que el pod de la DB esté Running
-kubectl get pods -n n8n-system -w
+cat <<EOF > gitops/apps/database.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n-database-postgresql
+  namespace: n8n-system
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: n8n-postgres
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n-postgres
+  namespace: n8n-system
+spec:
+  selector:
+    matchLabels:
+      app: n8n-postgres
+  template:
+    metadata:
+      labels:
+        app: n8n-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:13
+          env:
+            - name: POSTGRES_USER
+              value: "n8n_user"
+            - name: POSTGRES_PASSWORD
+              value: "StrongPassword123!"
+            - name: POSTGRES_DB
+              value: "n8n_db"
+          ports:
+            - containerPort: 5432
+EOF
+
+kubectl apply -f gitops/apps/database.yaml
 ```
 
-### 5.2: Motor n8n
+### 5.2: Motor n8n y Validación de ADDRESS
 ```bash
 kubectl apply -f gitops/apps/n8n.yaml
-# Si el pod estaba en CrashLoop, forzar reinicio tras subir la DB
-kubectl rollout restart deployment n8n -n n8n-system
-```
 
-**Validación de URL:**
-```bash
+# Monitorear hasta obtener DNS del ALB
 kubectl get ingress -n n8n-system --watch
 ```
 
@@ -123,33 +158,34 @@ kubectl get ingress -n n8n-system --watch
 **Objetivo:** Validar flujo de tráfico externo al cluster.
 
 ### 1. URL
-Use el **ADDRESS** (DNS del ALB) obtenido en la Fase 5.
+Navegar al **ADDRESS** obtenido en la Fase 5.
 
-### 2. Configuración en n8n
-- **Nodo Webhook:** Método `GET` | Path `/estado` | Respond: "Using 'Respond to Webhook' Node".
-- **Nodo Respond to Webhook:** En Response Body pega: `{"mensaje": "¡Hola Jose! Cluster VIVO 🤖🚀"}`.
+### 2. Flujo
+Crear un Webhook (GET) -> Respond to Webhook.
 
-### 3. Test
-Abre en el navegador: `http://<ADDRESS-ALB>/webhook-test/estado`
+### 3. Respuesta
+JSON: `{"mensaje": "¡Hola Jose! Cluster VIVO 🤖🚀"}`
+
+### 4. Verificación
+Ejecutar el túnel y validar respuesta exitosa.
 
 ---
 
 ## 💀 Fase 7: Protocolo de Destrucción Forense
-**Objetivo:** Eliminación total para facturación $0.
+**Objetivo:** Limpieza total para evitar cargos residuales.
 ```bash
-# 1. Limpieza de K8s y Volúmenes (EBS)
+# 1. Limpiar recursos K8s
 kubectl delete ingress --all -A
 kubectl delete pvc --all -A
 kubectl delete ns n8n-system
 
-# 2. Infraestructura Core
+# 2. Destruir infraestructura
 cd iac/live/dev/eks && terragrunt destroy -auto-approve
 cd ../vpc && terragrunt destroy -auto-approve
 
-# 3. Limpieza de Roles Residuales y Backend
+# 3. Limpieza final de backend y roles
 ./scripts/nuke_zombies.sh
 ./scripts/nuke_backend_smart.sh
-./scripts/audit_finops_ultimate.sh
 ```
 
 ---
