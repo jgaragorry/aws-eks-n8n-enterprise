@@ -218,39 +218,45 @@ Copie el DNS generado en la Fase 5 (columna ADDRESS) y ábralo en su navegador.
 
 ---
 
-## 💀 Fase 7: Protocolo de Destrucción Forense
-**Objetivo:** Limpieza total y garantizada de recursos para llevar el costo de AWS a $0.00. 
+## 💀 Fase 7: Protocolo de Destrucción Forense ($0.00 Garantizado)
+
+**Objetivo:** Limpieza total, atómica y garantizada de recursos para llevar el costo de la cuenta AWS a cero absoluto.
 
 > [!IMPORTANT]
-> El orden de ejecución es crítico para evitar recursos huérfanos que impiden el borrado de la VPC.
+> **Jerarquía de Destrucción:** En AWS, el orden de los factores sí altera el producto. Debemos liberar la red (Capa 7) antes de destruir la infraestructura (Capa 2-3) para evitar "recursos huérfanos" que bloquean el borrado de la VPC.
 
-```bash
-# 1. ELIMINACIÓN DE TRÁFICO (Capa 7)
-# Elimina el Ingress para que AWS empiece a liberar el Load Balancer (ALB)
-kubectl delete ingress --all -A
-
-# 2. LIMPIEZA DE IDENTIDADES Y LOGS (FinOps)
-# Borra logs de CloudWatch y roles IAM manuales detectados por la auditoría
-./scripts/nuke_zombies.sh
-
-# 3. DESTRUCCIÓN DE CÓMPUTO (Capa 4)
-# Elimina los nodos de trabajo y el clúster EKS
-cd iac/live/dev/eks
-terragrunt destroy -auto-approve
-
-# 4. DESTRUCCIÓN DE RED (Capa 2-3)
-# Elimina la VPC, NAT Gateway y Elastic IPs (Solo tras borrar el EKS)
-cd ../vpc
-terragrunt destroy -auto-approve
-
-# 5. ELIMINACIÓN DE ESTADO (Cerebro de Infra)
-# Elimina el Bucket S3 y la Tabla DynamoDB de Terraform
-cd ../../../
-./scripts/nuke_backend_smart.sh
-
-# 6. AUDITORÍA FINAL DE CONFIRMACIÓN
-# Ejecuta el bloque de auditoría para certificar el estado $0.00
-./scripts/audit_finops_extreme.sh && ./scripts/audit_finops_ultimate.sh
-```
 ---
+
+### 1. Despliegue del "Ariete" (Red y Tráfico)
+Liberamos los balanceadores de carga y las IPs elásticas. Esto evita que la VPC quede atrapada intentando borrar subredes asociadas a recursos activos.
+
+`./scripts/nuke_loadbalancers.sh`
+
+### 2. Ejecución del Protocolo Atómico
+Usamos el orquestador principal. Este script integra la limpieza de identidades (IAM), el cifrado (KMS) y dispara la destrucción secuencial de la infraestructura.
+
+`./scripts/clean_project_v2.sh`
+
+### 3. Eliminación del "Cerebro" (Backend)
+Una vez que la infraestructura física ha sido eliminada, procedemos a borrar el rastro del estado de Terraform para eliminar costos de almacenamiento.
+
+`./scripts/nuke_backend_smart.sh`
+
+### 4. Auditoría de Certificación FinOps
+No asumimos el éxito, lo certificamos. Este reporte final verifica cada capa de AWS para asegurar que no existan cargos residuales.
+
+`./scripts/audit_finops_extreme.sh`
+
+---
+
+### 📊 Cuadro de Mandos de Finalización
+
+| Componente | Estado Esperado | Script Responsable |
+| :--- | :--- | :--- |
+| **Balanceadores (ALB/NLB)** | 0 (Limpio) | nuke_loadbalancers.sh |
+| **KMS (Customer Managed)** | PendingDeletion | clean_project_v2.sh |
+| **IAM Roles & Policies** | 0 (Limpio) | clean_project_v2.sh |
+| **VPC / NAT Gateways** | 0 (Limpio) | clean_project_v2.sh |
+| **Backend (S3/Dynamo)** | Eliminado | nuke_backend_smart.sh |
+
 **Estado Final Esperado:** COSTO AWS = $0.00 🏁
