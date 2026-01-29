@@ -1,14 +1,12 @@
 # 🚀 RUNBOOK MASTER: Despliegue n8n Enterprise en AWS EKS
 
 ![Status](https://img.shields.io/badge/STATUS-PRODUCCIÓN-success?style=for-the-badge&logo=checkmarx)
-![Version](https://img.shields.io/badge/VERSION-2.4.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/VERSION-2.5.0-blue?style=for-the-badge)
 ![FinOps](https://img.shields.io/badge/FINOPS-CERTIFIED-red?style=for-the-badge&logo=moneygram)
 ![AWS](https://img.shields.io/badge/AWS-EKS-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![GitOps](https://img.shields.io/badge/GITOPS-ARGOCD-orange?style=for-the-badge&logo=argo)
 
 **Autor:** Jose Garagorry & Gemini AI | **Nivel:** Enterprise Arch
-
-Este documento es la **Guía Maestra de Ejecución**. Contiene cada paso necesario para levantar, configurar, probar y destruir la arquitectura, garantizando el **Cero Absoluto** en costos al finalizar.
 
 ---
 
@@ -25,33 +23,29 @@ Este documento es la **Guía Maestra de Ejecución**. Contiene cada paso necesar
 ---
 
 ## 🛠️ Fase 0: Preparación del Entorno
-**Objetivo:** Asegurar acceso administrativo a la cuenta AWS.
+**Objetivo:** Garantizar que el entorno local tiene las herramientas para gestionar la nube.
+
+### Instalación de eksctl
+**¿Para qué sirve?** Es la herramienta oficial para gestionar clusters EKS. En este lab es **obligatoria** para crear el proveedor OIDC, que permite que los pods de Kubernetes asuman roles de IAM de AWS (necesario para el Load Balancer).
 ```bash
-aws sts get-caller-identity
-# Debe devolver tu Account ID correcta.
+curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+sudo mv /tmp/eksctl /usr/local/bin
+# Verificar instalación:
+eksctl version
 ```
 
 ---
 
 ## 📦 Fase 1: Backend de Estado (La Base)
 **Objetivo:** Crear S3 + DynamoDB para el estado persistente de Terraform.
-
-**Ejecución:**
 ```bash
 ./scripts/setup_backend.sh
-```
-
-**Validación:**
-```bash
-./scripts/check_backend.sh
 ```
 
 ---
 
 ## 🌐 Fase 2: Infraestructura de Red (VPC)
 **Objetivo:** Configurar VPC, Subnets y NAT Gateways.
-
-**Ejecución:**
 ```bash
 cd iac/live/dev/vpc
 terragrunt apply -auto-approve
@@ -61,25 +55,19 @@ terragrunt apply -auto-approve
 
 ## ☸️ Fase 3: Cómputo (Cluster EKS)
 **Objetivo:** Levantar el Cluster Kubernetes y Worker Nodes (t3.medium).
-
-**Ejecución:**
 ```bash
 cd ../eks
 terragrunt apply -auto-approve
-```
-
-**Conexión Crítica:**
-```bash
 aws eks update-kubeconfig --name eks-gitops-dev --region us-east-1
 ```
 
 ---
 
 ## 🏗️ Fase 4: Plataforma GitOps (ArgoCD & ALB)
-**Objetivo:** Instalar el cerebro GitOps y asegurar permisos de AWS para el balanceador.
+**Objetivo:** Configurar la identidad del cluster y los controladores de tráfico.
 
-### 4.1: Vinculación de Identidad (OIDC) - CRÍTICO
-**Sin este paso, el Ingress nunca recibirá una dirección ADDRESS de Amazon.**
+### 4.1: Vinculación OIDC (Identidad)
+**Este paso crea la confianza entre AWS y Kubernetes. Es el que permite que aparezca el ADDRESS en el Ingress.**
 ```bash
 eksctl utils associate-iam-oidc-provider --cluster eks-gitops-dev --approve
 ```
@@ -88,9 +76,11 @@ eksctl utils associate-iam-oidc-provider --cluster eks-gitops-dev --approve
 ```bash
 cd ../../../..
 ./scripts/setup_alb_controller.sh
+# Forzar reinicio para asegurar toma de nuevos permisos:
+kubectl rollout restart deployment aws-load-balancer-controller -n kube-system
 ```
 
-### 4.3: ArgoCD (El Operador GitOps)
+### 4.3: ArgoCD
 ```bash
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
@@ -101,14 +91,12 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/st
 ## 🚀 Fase 5: Despliegue de Aplicación (n8n)
 **Objetivo:** Provisionar n8n Enterprise mediante el manifiesto GitOps.
 ```bash
-# Nombre de archivo real validado: n8n.yaml
 kubectl apply -f gitops/apps/n8n.yaml
 ```
 
 **Validación de ADDRESS (ALB):**
 ```bash
 kubectl get ingress -n n8n-system --watch
-# Gracias al paso 4.1, el ADDRESS aparecerá en menos de 1 minuto.
 ```
 
 ---
@@ -116,43 +104,39 @@ kubectl get ingress -n n8n-system --watch
 ## 🍒 Fase 6: La Prueba de Fuego (Webhook Test)
 **Objetivo:** Validar flujo de tráfico externo al cluster.
 
-### 1. Obtención de URL
-Ejecuta `kubectl get ingress -n n8n-system` y copia el valor de **ADDRESS**.
+### 1. URL
+Copia el **ADDRESS** de `kubectl get ingress -n n8n-system`.
 
 ### 2. Configuración en n8n
-- **Nodo Webhook:** Método `GET` | Path `estado` | Respond: "Using 'Respond to Webhook' Node".
+- **Nodo Webhook:** Método `GET` | Path `/estado` | Respond: "Using 'Respond to Webhook' Node".
 - **Nodo Respond to Webhook:** En Response Body pega: `{"mensaje": "¡Hola Jose! Cluster VIVO 🤖🚀"}`.
 
-### 3. Ejecución
-- Haz clic en **"Execute Workflow"** en la interfaz de n8n.
-- Abre en el navegador: `http://<TU-ADDRESS-ALB>/webhook-test/estado`.
-- **Éxito:** Debes ver el JSON en pantalla y el flujo en verde.
+### 3. Test
+Abre en el navegador: `http://<ADDRESS-ALB>/webhook-test/estado`.
 
 ---
 
 ## 💀 Fase 7: Protocolo de Destrucción Forense (FinOps)
 **Objetivo:** Eliminación total de recursos para evitar cargos.
 
-### 7.1 Limpieza de K8s (ALB y EBS)
+### 7.1 Limpieza de K8s
 ```bash
 kubectl delete ingress --all -A
 kubectl delete pvc --all -A
 ```
 
-### 7.2 Destrucción de Infraestructura Core (Rutas Reales)
+### 7.2 Destrucción de Infraestructura Core
 ```bash
 cd iac/live/dev/eks && terragrunt destroy -auto-approve
 cd ../vpc && terragrunt destroy -auto-approve
 ```
 
-### 7.3 Extracción Quirúrgica de VPC (Bypass de bloqueo)
-**Uso exclusivo si la VPC queda bloqueada por dependencias residuales.**
+### 7.3 Extracción Quirúrgica de VPC (Si hay bloqueo)
 ```bash
 ./scripts/surgical_vpc_extraction.sh <VPC_ID_DE_AUDITORIA>
 ```
 
-### 7.4 Saneamiento de Identidad (IAM v3 - Anti-Conflictos)
-**Elimina roles con políticas Managed e Inline que Terraform olvida.**
+### 7.4 Saneamiento de Identidad (IAM v3)
 ```bash
 HOY=$(date +%Y-%m-%d)
 ROLES=$(aws iam list-roles --query "Roles[?starts_with(CreateDate, '$HOY')].RoleName" --output text)
