@@ -1,7 +1,7 @@
 # 🚀 RUNBOOK MASTER: Despliegue n8n Enterprise en AWS EKS
 
 ![Status](https://img.shields.io/badge/STATUS-PRODUCCIÓN-success?style=for-the-badge&logo=checkmarx)
-![Version](https://img.shields.io/badge/VERSION-2.3.1-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/VERSION-2.4.0-blue?style=for-the-badge)
 ![FinOps](https://img.shields.io/badge/FINOPS-CERTIFIED-red?style=for-the-badge&logo=moneygram)
 ![AWS](https://img.shields.io/badge/AWS-EKS-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![GitOps](https://img.shields.io/badge/GITOPS-ARGOCD-orange?style=for-the-badge&logo=argo)
@@ -76,15 +76,21 @@ aws eks update-kubeconfig --name eks-gitops-dev --region us-east-1
 ---
 
 ## 🏗️ Fase 4: Plataforma GitOps (ArgoCD & ALB)
-**Objetivo:** Instalar controladores de tráfico y motor GitOps.
+**Objetivo:** Instalar el cerebro GitOps y asegurar permisos de AWS para el balanceador.
 
-### Paso 4.1: AWS Load Balancer Controller
+### 4.1: Vinculación de Identidad (OIDC) - CRÍTICO
+**Sin este paso, el Ingress nunca recibirá una dirección ADDRESS de Amazon.**
+```bash
+eksctl utils associate-iam-oidc-provider --cluster eks-gitops-dev --approve
+```
+
+### 4.2: AWS Load Balancer Controller
 ```bash
 cd ../../../..
 ./scripts/setup_alb_controller.sh
 ```
 
-### Paso 4.2: ArgoCD
+### 4.3: ArgoCD (El Operador GitOps)
 ```bash
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
@@ -93,15 +99,16 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/st
 ---
 
 ## 🚀 Fase 5: Despliegue de Aplicación (n8n)
-**Objetivo:** Provisionar n8n Enterprise mediante ArgoCD.
+**Objetivo:** Provisionar n8n Enterprise mediante el manifiesto GitOps.
 ```bash
-# Nombre de archivo corregido: n8n.yaml
+# Nombre de archivo real validado: n8n.yaml
 kubectl apply -f gitops/apps/n8n.yaml
 ```
 
-**Validación DNS:**
+**Validación de ADDRESS (ALB):**
 ```bash
 kubectl get ingress -n n8n-system --watch
+# Gracias al paso 4.1, el ADDRESS aparecerá en menos de 1 minuto.
 ```
 
 ---
@@ -112,21 +119,19 @@ kubectl get ingress -n n8n-system --watch
 ### 1. Obtención de URL
 Ejecuta `kubectl get ingress -n n8n-system` y copia el valor de **ADDRESS**.
 
-Accede a dicha URL en tu navegador.
-
 ### 2. Configuración en n8n
 - **Nodo Webhook:** Método `GET` | Path `estado` | Respond: "Using 'Respond to Webhook' Node".
 - **Nodo Respond to Webhook:** En Response Body pega: `{"mensaje": "¡Hola Jose! Cluster VIVO 🤖🚀"}`.
 
 ### 3. Ejecución
-- Haz clic en **"Execute Workflow"** en n8n.
+- Haz clic en **"Execute Workflow"** en la interfaz de n8n.
 - Abre en el navegador: `http://<TU-ADDRESS-ALB>/webhook-test/estado`.
-- **Éxito:** Debes ver el JSON en pantalla y el workflow ponerse en verde.
+- **Éxito:** Debes ver el JSON en pantalla y el flujo en verde.
 
 ---
 
 ## 💀 Fase 7: Protocolo de Destrucción Forense (FinOps)
-**Objetivo:** Eliminación total de recursos facturables.
+**Objetivo:** Eliminación total de recursos para evitar cargos.
 
 ### 7.1 Limpieza de K8s (ALB y EBS)
 ```bash
@@ -134,13 +139,13 @@ kubectl delete ingress --all -A
 kubectl delete pvc --all -A
 ```
 
-### 7.2 Destrucción de Infraestructura Core
+### 7.2 Destrucción de Infraestructura Core (Rutas Reales)
 ```bash
 cd iac/live/dev/eks && terragrunt destroy -auto-approve
 cd ../vpc && terragrunt destroy -auto-approve
 ```
 
-### 7.3 Extracción Quirúrgica de VPC (Si hay bloqueo)
+### 7.3 Extracción Quirúrgica de VPC (Bypass de bloqueo)
 **Uso exclusivo si la VPC queda bloqueada por dependencias residuales.**
 ```bash
 ./scripts/surgical_vpc_extraction.sh <VPC_ID_DE_AUDITORIA>
@@ -154,7 +159,7 @@ ROLES=$(aws iam list-roles --query "Roles[?starts_with(CreateDate, '$HOY')].Role
 
 for role in $ROLES; do
     if [[ $role == AWSServiceRoleFor* ]]; then continue; fi
-    echo "🛠️ Limpiando rol: $role"
+    echo "🛠️ Limpiando rol residual: $role"
     for policy in $(aws iam list-attached-role-policies --role-name $role --query "AttachedPolicies[*].PolicyArn" --output text); do
         aws iam detach-role-policy --role-name $role --policy-arn $policy
     done
