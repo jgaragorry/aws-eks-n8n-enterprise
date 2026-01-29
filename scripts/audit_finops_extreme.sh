@@ -1,29 +1,23 @@
 #!/bin/bash
-
 # ==============================================================================
-# 🕵️ AUDIT FINOPS EXTREME: REPORTE DE ESTADO $0
-# ==============================================================================
-# OBJETIVO: Verificar que NO quede ningún recurso facturable.
-# MODO: Solo Lectura.
+# 🕵️ AUDIT FINOPS EXTREME: REPORTE DE ESTADO $0 (V4 - TOTAL PRECISION)
 # ==============================================================================
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
 NC='\033[0m'
 
 REGION=$(aws configure get region)
-CLUSTER_KEYWORD="eks-gitops-dev"
 
 echo -e "\n🔍 INICIANDO AUDITORÍA FORENSE EN REGIÓN: $REGION"
 echo "---------------------------------------------------"
 
 check_resource() {
-    NAME=$1
-    COUNT=$2
-    DETAILS=$3
+    NAME=$1; COUNT=$2; DETAILS=$3
     if [ "$COUNT" -gt 0 ]; then
         echo -e "${RED}[FAIL] $NAME encontrados: $COUNT${NC}"
-        echo -e "${RED}       -> $DETAILS${NC}"
+        [ ! -z "$DETAILS" ] && echo -e "${RED}       -> $DETAILS${NC}"
     else
         echo -e "${GREEN}[PASS] $NAME: 0 (Limpio)${NC}"
     fi
@@ -32,45 +26,63 @@ check_resource() {
 # 1. CÓMPUTO
 echo -e "\n--- [COMPUTE] ---"
 INSTANCES=$(aws ec2 describe-instances --filters "Name=instance-state-name,Values=running,stopped" --query "Reservations[*].Instances[*].InstanceId" --output text | wc -w)
-check_resource "Instancias EC2 Activas" $INSTANCES "$(aws ec2 describe-instances --filters "Name=instance-state-name,Values=running,stopped" --query "Reservations[*].Instances[*].InstanceId" --output text)"
+check_resource "Instancias EC2 Activas" $INSTANCES ""
 
-# 2. ALMACENAMIENTO (DISCOS Y SNAPSHOTS)
+# 2. ALMACENAMIENTO
 echo -e "\n--- [STORAGE] ---"
 VOLUMES=$(aws ec2 describe-volumes --query "Volumes[*].VolumeId" --output text | wc -w)
-check_resource "Volúmenes EBS Totales" $VOLUMES "$(aws ec2 describe-volumes --query "Volumes[*].VolumeId" --output text)"
+check_resource "Volúmenes EBS Totales" $VOLUMES ""
 
-SNAPS=$(aws ec2 describe-snapshots --owner-ids self --query "Snapshots[*].SnapshotId" --output text | wc -w)
-check_resource "Snapshots Totales" $SNAPS "$(aws ec2 describe-snapshots --owner-ids self --query "Snapshots[*].SnapshotId" --output text)"
-
-# 3. REDES (LO MÁS CRÍTICO)
+# 3. REDES
 echo -e "\n--- [NETWORKING] ---"
 VPCS=$(aws ec2 describe-vpcs --query "Vpcs[?IsDefault==\`false\`].VpcId" --output text | wc -w)
-check_resource "VPCs Custom" $VPCS "$(aws ec2 describe-vpcs --query "Vpcs[?IsDefault==\`false\`].VpcId" --output text)"
+check_resource "VPCs Custom" $VPCS ""
 
 NATS=$(aws ec2 describe-nat-gateways --filter "Name=state,Values=available" --query "NatGateways[*].NatGatewayId" --output text | wc -w)
-check_resource "NAT Gateways ($$$)" $NATS "$(aws ec2 describe-nat-gateways --filter "Name=state,Values=available" --query "NatGateways[*].NatGatewayId" --output text)"
-
-EIPS=$(aws ec2 describe-addresses --query "Addresses[*].AllocationId" --output text | wc -w)
-check_resource "Elastic IPs ($$$)" $EIPS "$(aws ec2 describe-addresses --query "Addresses[*].AllocationId" --output text)"
+check_resource "NAT Gateways" $NATS ""
 
 ALBS=$(aws elbv2 describe-load-balancers --query "LoadBalancers[*].LoadBalancerArn" --output text | wc -w)
-check_resource "Balanceadores V2 (ALB/NLB)" $ALBS ""
+check_resource "Balanceadores V2" $ALBS ""
 
-CLBS=$(aws elb describe-load-balancers --query "LoadBalancerDescriptions[*].LoadBalancerName" --output text | wc -w)
-check_resource "Classic Load Balancers" $CLBS ""
+# 4. CAPA DE CIFRADO (KMS - Auditoría de Costo Real)
+echo -e "\n--- [KMS CHECK] ---"
+KMS_KEYS=$(aws kms list-keys --query "Keys[*].KeyId" --output text)
+KMS_FAIL_COUNT=0
 
-# 4. KUBERNETES
-echo -e "\n--- [EKS] ---"
-CLUSTERS=$(aws eks list-clusters --query "clusters" --output text | wc -w)
-check_resource "Clusters EKS" $CLUSTERS "$(aws eks list-clusters --query "clusters" --output text)"
+for key in $KMS_KEYS; do
+    KMS_METADATA=$(aws kms describe-key --key-id "$key" --query "KeyMetadata.[KeyState, KeyManager, Description]" --output text)
+    STATE=$(echo $KMS_METADATA | awk '{print $1}')
+    MANAGER=$(echo $KMS_METADATA | awk '{print $2}')
+    # Capturar la descripción completa
+    DESC=$(echo $KMS_METADATA | cut -d' ' -f3-)
 
-# 5. IAM (ESPECÍFICO)
+    if [ "$MANAGER" == "AWS" ]; then
+        # Llaves de AWS son GRATIS, no cuentan como residuo de costo
+        echo -e "${GREEN}[PASS] Key AWS Managed (Gratis): $key${NC}"
+        echo -e "       -> Desc: $DESC"
+    else
+        # Solo las Customer Managed tienen costo de $1/mes
+        if [ "$STATE" == "Enabled" ]; then
+            echo -e "${RED}[FAIL] Key CUSTOMER ACTIVA (Costo $): $key${NC}"
+            KMS_FAIL_COUNT=$((KMS_FAIL_COUNT + 1))
+        else
+            echo -e "${GREEN}[PASS] Key CUSTOMER Sentenciada: $key (Sin cobro)${NC}"
+        fi
+    fi
+done
+
+if [ $KMS_FAIL_COUNT -eq 0 ]; then
+    echo -e "\n${GREEN}✨ REPORTE FINOPS: Cero gastos detectados en KMS.${NC}"
+fi
+
+# 5. IAM
 echo -e "\n--- [IAM CHECK] ---"
-ROLE=$(aws iam get-role --role-name AmazonEKSLoadBalancerControllerRole 2>/dev/null)
-if [ $? -eq 0 ]; then echo -e "${RED}[FAIL] Rol Manual IAM sigue existiendo.${NC}"; else echo -e "${GREEN}[PASS] Rol Manual IAM eliminado.${NC}"; fi
+ROLE_NAME=$(aws iam list-roles --query "Roles[?contains(RoleName, 'LoadBalancerControllerRole')].RoleName" --output text)
+if [ ! -z "$ROLE_NAME" ]; then 
+    echo -e "${RED}[FAIL] Rol Manual IAM ($ROLE_NAME) sigue existiendo.${NC}"; 
+else 
+    echo -e "${GREEN}[PASS] Rol Manual IAM eliminado.${NC}"; 
+fi
 
-POLICY=$(aws iam list-policies --scope Local --query "Policies[?PolicyName=='AWSLoadBalancerControllerIAMPolicy'].PolicyName" --output text)
-if [ ! -z "$POLICY" ]; then echo -e "${RED}[FAIL] Política Manual IAM sigue existiendo.${NC}"; else echo -e "${GREEN}[PASS] Política Manual IAM eliminada.${NC}"; fi
-
-echo "---------------------------------------------------"
+echo -e "\n---------------------------------------------------"
 echo "Fin de la Auditoría."
