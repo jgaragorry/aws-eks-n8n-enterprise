@@ -1,44 +1,49 @@
 # 🚀 RUNBOOK MASTER: Despliegue n8n Enterprise en AWS EKS
 
 ![Status](https://img.shields.io/badge/STATUS-PRODUCCIÓN-success?style=for-the-badge&logo=checkmarx)
-![Version](https://img.shields.io/badge/VERSION-3.9.5-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/VERSION-4.0.0-blue?style=for-the-badge)
 ![FinOps](https://img.shields.io/badge/FINOPS-CERTIFIED-red?style=for-the-badge&logo=moneygram)
 ![AWS](https://img.shields.io/badge/AWS-EKS-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![GitOps](https://img.shields.io/badge/GITOPS-ARGOCD-orange?style=for-the-badge&logo=argo)
 
 **Autor:** Jose Garagorry & Gemini AI | **Nivel:** Enterprise Arch
 
-Este documento es la única fuente de verdad. Siga el orden secuencial para garantizar la persistencia de datos y la conectividad externa.
+**Propósito:** Este documento sirve como guía definitiva para el despliegue de una infraestructura GitOps escalable. Está diseñado para ser ejecutado de forma secuencial, garantizando que incluso un técnico sin experiencia previa pueda levantar el entorno n8n Enterprise con persistencia de datos y conectividad pública en AWS.
 
 ---
 
 ## 📋 Tabla de Contenidos
 1. [Fase 0: Preparación del Entorno](#fase-0-preparación-del-entorno)
-2. [Fase 1: Backend de Estado](#fase-1-backend-de-estado)
+2. [Fase 1: Backend de Estado (Terragrunt)](#fase-1-backend-de-estado)
 3. [Fase 2: Infraestructura de Red (VPC)](#fase-2-infraestructura-de-red-vpc)
 4. [Fase 3: Cómputo (Cluster EKS)](#fase-3-cómputo-cluster-eks)
-5. [Fase 4: Plataforma (Identidad y Tráfico)](#fase-4-plataforma-identidad-y-tráfico)
-6. [Fase 5: Despliegue de Aplicación (n8n)](#fase-5-despliegue-de-aplicación-n8n)
-7. [Fase 6: La Prueba de Fuego (Webhook Test)](#fase-6-la-prueba-de-fuego-webhook-test)
+5. [Fase 4: Plataforma (Identidad, IAM y Tráfico)](#fase-4-plataforma-identidad-y-tráfico)
+6. [Fase 5: Despliegue de Aplicación (GitOps n8n + DB)](#fase-5-despliegue-de-aplicación-n8n)
+7. [Fase 6: La Prueba de Fuego (Validación Webhook)](#fase-6-la-prueba-de-fuego-webhook-test)
 8. [Fase 7: Protocolo de Destrucción Forense](#fase-7-protocolo-de-destrucción-forense)
 
 ---
 
 ## 🛠️ Fase 0: Preparación del Entorno
-**Objetivo:** Instalar herramientas de gestión de clúster e identidad.
+**Objetivo:** Instalar las herramientas necesarias para la gestión del clúster y la autenticación con AWS.
+
+* **eksctl:** Herramienta oficial para gestionar clústeres EKS y proveedores de identidad OIDC.
+* **aws-cli:** Interfaz de comandos para interactuar con los servicios de Amazon.
+
 ```bash
 # Instalación de eksctl para gestión de OIDC e IAM Roles
 curl --silent --location "[https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname](https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname) -s)_amd64.tar.gz" | tar xz -C /tmp
 sudo mv /tmp/eksctl /usr/local/bin
 
-# Verificación de identidad
+# Verificación de identidad para asegurar que tenemos permisos de administrador
 aws sts get-caller-identity
 ```
 
 ---
 
 ## 📦 Fase 1: Backend de Estado
-**Objetivo:** S3 y DynamoDB para persistencia de Terragrunt.
+**Objetivo:** Configurar S3 y DynamoDB para que Terragrunt pueda almacenar el estado de la infraestructura de forma segura y evitar conflictos de bloqueo.
+
 ```bash
 ./scripts/setup_backend.sh
 ./scripts/check_backend.sh
@@ -47,7 +52,8 @@ aws sts get-caller-identity
 ---
 
 ## 🌐 Fase 2: Infraestructura de Red (VPC)
-**Objetivo:** Desplegar la red segmentada en AWS.
+**Objetivo:** Crear la red segmentada (VPC) con subredes públicas y privadas, NAT Gateways y tablas de ruteo necesarias para el tráfico del clúster.
+
 ```bash
 cd iac/live/dev/vpc
 terragrunt apply -auto-approve
@@ -56,50 +62,59 @@ terragrunt apply -auto-approve
 ---
 
 ## ☸️ Fase 3: Cómputo (Cluster EKS)
-**Objetivo:** Levantar el plano de control y nodos de trabajo.
+**Objetivo:** Desplegar el clúster de Kubernetes (EKS) y los nodos de trabajo donde correrán nuestros contenedores.
+
 ```bash
 cd ../eks
 terragrunt apply -auto-approve
+
+# Actualizar el archivo kubeconfig local para poder comandar el clúster con kubectl
 aws eks update-kubeconfig --name eks-gitops-dev --region us-east-1
 ```
 
 ---
 
 ## 🏗️ Fase 4: Plataforma (Identidad y Tráfico)
-**Objetivo:** Configurar el controlador de carga y la identidad del clúster.
+**Objetivo:** Configurar la seguridad de identidad (OIDC) y los permisos de IAM para que el clúster pueda crear recursos en AWS automáticamente (como el Load Balancer).
 
 ### 4.1: Vinculación OIDC
 ```bash
 eksctl utils associate-iam-oidc-provider --cluster eks-gitops-dev --approve
 ```
 
-### 4.2: Inyección de Permisos IAM (Crítico)
-**Vital para que el AWS Load Balancer Controller pueda crear el Ingress ADDRESS.**
+### 4.2: Inyección de Permisos IAM (Paso Crítico)
+**Vital:** Sin este paso, el controlador de AWS Load Balancer no tendrá permiso para crear el balanceador físico. Esto soluciona el error donde el Ingress se queda sin dirección IP (ADDRESS vacío).
+
 ```bash
 cd ../../../
+# Descargar la política oficial de Amazon para el Load Balancer Controller
 curl -o iam_policy.json [https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json](https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json)
+
+# Adjuntar la política al rol de IAM del controlador
 aws iam put-role-policy --role-name AmazonEKSLoadBalancerControllerRole --policy-name ALBControllerPolicy --policy-document file://iam_policy.json
 ```
 
 ### 4.3: Acceso a Consola GitOps (ArgoCD)
-**Objetivo:** Monitorear visualmente el estado de n8n y la base de datos.
-1. **Contraseña Admin:**
-   ```bash
-   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
-   ```
-2. **Habilitar Túnel:**
-   ```bash
-   kubectl port-forward svc/argocd-server -n argocd 8080:443
-   ```
-3. **URL de Acceso:** `https://localhost:8080` (User: `admin`).
+**Objetivo:** Monitorear visualmente la salud de las aplicaciones.
+1.  **Obtener Contraseña Admin:**
+    ```bash
+    kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+    ```
+2.  **Habilitar Túnel (Port-Forward):**
+    ```bash
+    kubectl port-forward svc/argocd-server -n argocd 8080:443
+    ```
+3.  **URL de Acceso:** Abra `https://localhost:8080` e ingrese con usuario `admin`.
 
 ---
 
-## 🚀 Fase 5: Despliegue de Aplicación (n8n)
-**Objetivo:** Levantar n8n con persistencia PostgreSQL sincronizada.
+## 🚀 Fase 5: Despliegue de Aplicación (Full GitOps)
+**Objetivo:** Desplegar n8n y su base de datos PostgreSQL de forma que ArgoCD las reconozca y gestione por separado.
 
-### 5.1: Base de Datos (PostgreSQL)
+### 5.1: Base de Datos (PostgreSQL) - Persistencia
 **Inyección de configuración validada (User: n8n_user / Pass: StrongPassword123!).**
+Este comando utiliza `<<EOF` para garantizar que todo el contenido del manifiesto se escriba correctamente en el archivo local.
+
 ```bash
 cat <<EOF > gitops/apps/database.yaml
 apiVersion: v1
@@ -140,48 +155,81 @@ spec:
           ports:
             - containerPort: 5432
 EOF
+# Aplicar la base de datos para inicializar el servicio en el clúster
 kubectl apply -f gitops/apps/database.yaml
 ```
 
-### 5.2: Despliegue de n8n Engine
+### 5.2: Registro en ArgoCD (Doble Visualización)
+**IMPORTANTE:** Este paso crea un objeto tipo `Application` dentro de ArgoCD. Esto permite que la base de datos aparezca como una "tarjeta" independiente en el panel visual, facilitando su monitoreo y sincronización.
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: n8n-database
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: '[https://github.com/jgaragorry/aws-eks-n8n-enterprise.git](https://github.com/jgaragorry/aws-eks-n8n-enterprise.git)'
+    targetRevision: HEAD
+    path: gitops/apps
+    directory:
+      include: 'database.yaml'
+  destination:
+    server: '[https://kubernetes.default.svc](https://kubernetes.default.svc)'
+    namespace: n8n-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+EOF
+```
+
+### 5.3: Despliegue de Motor n8n
 ```bash
 kubectl apply -f gitops/apps/n8n.yaml
+# Monitorear la creación del balanceador de carga externo
 kubectl get ingress -n n8n-system --watch
 ```
 
 ---
 
 ## 🍒 Fase 6: La Prueba de Fuego (Webhook Test)
-**Objetivo:** Validar la comunicación entre el ALB de AWS, el Pod de n8n y la base de datos PostgreSQL.
+**Objetivo:** Validar la comunicación entre el balanceador de AWS (ALB), el Pod de n8n y la base de datos PostgreSQL.
 
 ### 1. Acceso
-Copie el DNS generado en la Fase 5 (ADDRESS) y ábralo en su navegador.
+Copie el DNS generado en la Fase 5 (columna ADDRESS) y ábralo en su navegador.
 
-### 2. Creación del Workflow
+### 2. Creación del Workflow de Validación
 - Haga clic en **"Create your first workflow"**.
-- Añada el nodo **Webhook**. Configure:
-  - **HTTP Method:** GET
-  - **Respond:** "Using 'Respond to Webhook' Node"
-- Añada el nodo **Respond to Webhook**. En **"Response Body"**, seleccione JSON y pegue:
+- Añada un nodo **Webhook** (configurado como GET).
+- Añada un nodo **Respond to Webhook**. En **"Response Body"**, seleccione JSON y pegue:
 ```json
   {"mensaje": "¡Hola Jose! Cluster VIVO 🤖🚀", "db_status": "connected", "gitops": "active"}
 ```
 
 ### 3. Ejecución y Validación Real
 - Presione **"Execute Workflow"**.
-- Copie la **"Test URL"** del nodo Webhook.
-- **IMPORTANTE:** Reemplace `http://localhost:5678` por su **DNS ADDRESS de AWS** en la barra de direcciones.
-- Si visualiza el JSON, el tráfico fluye perfectamente por el Ingress hasta el contenedor.
+- Copie la **"Test URL"** generada por el nodo Webhook.
+- **IMPORTANTE:** El sistema generará una URL con `localhost:5678`. Debe reemplazar esa parte por su **DNS ADDRESS de AWS**.
+- Si visualiza el JSON en el navegador, el tráfico fluye por el Ingress y n8n está operando con normalidad.
 
 ---
 
 ## 💀 Fase 7: Protocolo de Destrucción Forense
-**Objetivo:** Limpieza total para evitar cargos residuales de AWS.
+**Objetivo:** Limpieza total para evitar cargos residuales en la cuenta de AWS. Es fundamental seguir este orden.
+
 ```bash
+# 1. Eliminar el Ingress para liberar el balanceador físico de AWS
 kubectl delete ingress --all -A
-kubectl delete ns n8n-system argocd
+
+# 2. Destruir infraestructura de cómputo y red con Terragrunt
 cd iac/live/dev/eks && terragrunt destroy -auto-approve
 cd ../vpc && terragrunt destroy -auto-approve
+
+# 3. Eliminar el almacenamiento de estado S3 y DynamoDB
 ./scripts/nuke_backend_smart.sh
 ```
 
