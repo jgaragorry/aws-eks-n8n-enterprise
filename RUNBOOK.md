@@ -8,7 +8,7 @@
 
 **Autor:** Jose Garagorry & Gemini AI | **Nivel:** Enterprise Arch
 
-Este documento es la **Guía Maestra Única**. Siga el orden estricto para garantizar que los permisos de IAM y la persistencia de datos estén listos antes de levantar la aplicación.
+Este documento es la **Guía Maestra Única**. El orden de ejecución es crítico para asegurar que los permisos de AWS y la base de datos estén listos antes de que n8n intente arrancar.
 
 ---
 
@@ -74,7 +74,8 @@ aws eks update-kubeconfig --name eks-gitops-dev --region us-east-1
 eksctl utils associate-iam-oidc-provider --cluster eks-gitops-dev --approve
 ```
 
-### 4.2: Inyección de Permisos IAM (Evita AccessDenied)
+### 4.2: Inyección de Permisos IAM (Solución AccessDenied)
+**Este paso descarga e inyecta la política oficial necesaria para que el balanceador obtenga ADDRESS.**
 ```bash
 cd ../../../
 curl -o iam_policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
@@ -94,19 +95,20 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/st
 ---
 
 ## 🚀 Fase 5: Despliegue de Aplicación (n8n)
-**Objetivo:** Levantar Base de Datos y n8n en el orden correcto.
+**Objetivo:** Levantar Base de Datos y n8n en orden secuencial.
 
 ### 5.1: Persistencia (PostgreSQL)
+**Se debe aplicar antes para evitar que n8n falle al no encontrar el host de la DB.**
 ```bash
 kubectl apply -f gitops/apps/database.yaml 
-# Esperar a que el pod esté Running
+# Esperar a que el pod de la DB esté Running
 kubectl get pods -n n8n-system -w
 ```
 
-### 5.2: Aplicación n8n
+### 5.2: Motor n8n
 ```bash
 kubectl apply -f gitops/apps/n8n.yaml
-# Si el pod estaba en CrashLoop, reiniciarlo:
+# Si el pod estaba en CrashLoop, forzar reinicio tras subir la DB
 kubectl rollout restart deployment n8n -n n8n-system
 ```
 
@@ -121,7 +123,7 @@ kubectl get ingress -n n8n-system --watch
 **Objetivo:** Validar flujo de tráfico externo al cluster.
 
 ### 1. URL
-Use el **ADDRESS** obtenido en la Fase 5.
+Use el **ADDRESS** (DNS del ALB) obtenido en la Fase 5.
 
 ### 2. Configuración en n8n
 - **Nodo Webhook:** Método `GET` | Path `/estado` | Respond: "Using 'Respond to Webhook' Node".
@@ -135,16 +137,16 @@ Abre en el navegador: `http://<ADDRESS-ALB>/webhook-test/estado`
 ## 💀 Fase 7: Protocolo de Destrucción Forense
 **Objetivo:** Eliminación total para facturación $0.
 ```bash
-# 1. Limpieza de K8s y Volúmenes
+# 1. Limpieza de K8s y Volúmenes (EBS)
 kubectl delete ingress --all -A
 kubectl delete pvc --all -A
 kubectl delete ns n8n-system
 
-# 2. Infraestructura
+# 2. Infraestructura Core
 cd iac/live/dev/eks && terragrunt destroy -auto-approve
 cd ../vpc && terragrunt destroy -auto-approve
 
-# 3. Limpieza de Roles y Backend
+# 3. Limpieza de Roles Residuales y Backend
 ./scripts/nuke_zombies.sh
 ./scripts/nuke_backend_smart.sh
 ./scripts/audit_finops_ultimate.sh
