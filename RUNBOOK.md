@@ -1,7 +1,7 @@
 # 🚀 RUNBOOK MASTER: Despliegue n8n Enterprise en AWS EKS
 
 ![Status](https://img.shields.io/badge/STATUS-PRODUCCIÓN-success?style=for-the-badge&logo=checkmarx)
-![Version](https://img.shields.io/badge/VERSION-3.9.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/VERSION-3.9.5-blue?style=for-the-badge)
 ![FinOps](https://img.shields.io/badge/FINOPS-CERTIFIED-red?style=for-the-badge&logo=moneygram)
 ![AWS](https://img.shields.io/badge/AWS-EKS-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![GitOps](https://img.shields.io/badge/GITOPS-ARGOCD-orange?style=for-the-badge&logo=argo)
@@ -17,7 +17,7 @@ Este documento es la única fuente de verdad. Siga el orden secuencial para gara
 2. [Fase 1: Backend de Estado](#fase-1-backend-de-estado)
 3. [Fase 2: Infraestructura de Red (VPC)](#fase-2-infraestructura-de-red-vpc)
 4. [Fase 3: Cómputo (Cluster EKS)](#fase-3-cómputo-cluster-eks)
-5. [Fase 4: Plataforma (Identidad y ArgoCD)](#fase-4-plataforma-identidad-y-tráfico)
+5. [Fase 4: Plataforma (Identidad y Tráfico)](#fase-4-plataforma-identidad-y-tráfico)
 6. [Fase 5: Despliegue de Aplicación (n8n)](#fase-5-despliegue-de-aplicación-n8n)
 7. [Fase 6: La Prueba de Fuego (Webhook Test)](#fase-6-la-prueba-de-fuego-webhook-test)
 8. [Fase 7: Protocolo de Destrucción Forense](#fase-7-protocolo-de-destrucción-forense)
@@ -66,7 +66,7 @@ aws eks update-kubeconfig --name eks-gitops-dev --region us-east-1
 ---
 
 ## 🏗️ Fase 4: Plataforma (Identidad y Tráfico)
-**Objetivo:** Configurar el controlador de carga, identidad del clúster y consola visual.
+**Objetivo:** Configurar el controlador de carga y la identidad del clúster.
 
 ### 4.1: Vinculación OIDC
 ```bash
@@ -162,7 +162,7 @@ Copie el DNS generado en la Fase 5 (ADDRESS) y ábralo en su navegador.
 - Añada el nodo **Webhook**. Configure:
   - **HTTP Method:** GET
   - **Respond:** "Using 'Respond to Webhook' Node"
-- Añada el nodo **Respond to Webhook**. En **"Response Body"**, pegue:
+- Añada el nodo **Respond to Webhook**. En **"Response Body"**, seleccione JSON y pegue:
 ```json
   {"mensaje": "¡Hola Jose! Cluster VIVO 🤖🚀", "db_status": "connected", "gitops": "active"}
 ```
