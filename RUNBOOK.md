@@ -1,7 +1,7 @@
 # 🚀 RUNBOOK MASTER: Despliegue n8n Enterprise en AWS EKS
 
 ![Status](https://img.shields.io/badge/STATUS-PRODUCCIÓN-success?style=for-the-badge&logo=checkmarx)
-![Version](https://img.shields.io/badge/VERSION-2.3.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/VERSION-2.3.1-blue?style=for-the-badge)
 ![FinOps](https://img.shields.io/badge/FINOPS-CERTIFIED-red?style=for-the-badge&logo=moneygram)
 ![AWS](https://img.shields.io/badge/AWS-EKS-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![GitOps](https://img.shields.io/badge/GITOPS-ARGOCD-orange?style=for-the-badge&logo=argo)
@@ -95,7 +95,8 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/st
 ## 🚀 Fase 5: Despliegue de Aplicación (n8n)
 **Objetivo:** Provisionar n8n Enterprise mediante ArgoCD.
 ```bash
-kubectl apply -f gitops/apps/n8n-app.yaml
+# Nombre de archivo corregido: n8n.yaml
+kubectl apply -f gitops/apps/n8n.yaml
 ```
 
 **Validación DNS:**
