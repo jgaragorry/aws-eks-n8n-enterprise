@@ -1,7 +1,7 @@
 # 🚀 RUNBOOK MASTER: Despliegue n8n Enterprise en AWS EKS
 
 ![Status](https://img.shields.io/badge/STATUS-PRODUCCIÓN-success?style=for-the-badge&logo=checkmarx)
-![Version](https://img.shields.io/badge/VERSION-2.9.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/VERSION-3.9.0-blue?style=for-the-badge)
 ![FinOps](https://img.shields.io/badge/FINOPS-CERTIFIED-red?style=for-the-badge&logo=moneygram)
 ![AWS](https://img.shields.io/badge/AWS-EKS-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![GitOps](https://img.shields.io/badge/GITOPS-ARGOCD-orange?style=for-the-badge&logo=argo)
@@ -17,7 +17,7 @@ Este documento es la única fuente de verdad. Siga el orden secuencial para gara
 2. [Fase 1: Backend de Estado](#fase-1-backend-de-estado)
 3. [Fase 2: Infraestructura de Red (VPC)](#fase-2-infraestructura-de-red-vpc)
 4. [Fase 3: Cómputo (Cluster EKS)](#fase-3-cómputo-cluster-eks)
-5. [Fase 4: Plataforma (Identidad y Tráfico)](#fase-4-plataforma-identidad-y-tráfico)
+5. [Fase 4: Plataforma (Identidad y ArgoCD)](#fase-4-plataforma-identidad-y-tráfico)
 6. [Fase 5: Despliegue de Aplicación (n8n)](#fase-5-despliegue-de-aplicación-n8n)
 7. [Fase 6: La Prueba de Fuego (Webhook Test)](#fase-6-la-prueba-de-fuego-webhook-test)
 8. [Fase 7: Protocolo de Destrucción Forense](#fase-7-protocolo-de-destrucción-forense)
@@ -28,7 +28,7 @@ Este documento es la única fuente de verdad. Siga el orden secuencial para gara
 **Objetivo:** Instalar herramientas de gestión de clúster e identidad.
 ```bash
 # Instalación de eksctl para gestión de OIDC e IAM Roles
-curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+curl --silent --location "[https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname](https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname) -s)_amd64.tar.gz" | tar xz -C /tmp
 sudo mv /tmp/eksctl /usr/local/bin
 
 # Verificación de identidad
@@ -66,7 +66,7 @@ aws eks update-kubeconfig --name eks-gitops-dev --region us-east-1
 ---
 
 ## 🏗️ Fase 4: Plataforma (Identidad y Tráfico)
-**Objetivo:** Configurar el controlador de carga y la identidad del clúster.
+**Objetivo:** Configurar el controlador de carga, identidad del clúster y consola visual.
 
 ### 4.1: Vinculación OIDC
 ```bash
@@ -77,9 +77,21 @@ eksctl utils associate-iam-oidc-provider --cluster eks-gitops-dev --approve
 **Vital para que el AWS Load Balancer Controller pueda crear el Ingress ADDRESS.**
 ```bash
 cd ../../../
-curl -o iam_policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
+curl -o iam_policy.json [https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json](https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json)
 aws iam put-role-policy --role-name AmazonEKSLoadBalancerControllerRole --policy-name ALBControllerPolicy --policy-document file://iam_policy.json
 ```
+
+### 4.3: Acceso a Consola GitOps (ArgoCD)
+**Objetivo:** Monitorear visualmente el estado de n8n y la base de datos.
+1. **Contraseña Admin:**
+   ```bash
+   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+   ```
+2. **Habilitar Túnel:**
+   ```bash
+   kubectl port-forward svc/argocd-server -n argocd 8080:443
+   ```
+3. **URL de Acceso:** `https://localhost:8080` (User: `admin`).
 
 ---
 
@@ -131,7 +143,7 @@ EOF
 kubectl apply -f gitops/apps/database.yaml
 ```
 
-### 5.2: Despliegue de n8n
+### 5.2: Despliegue de n8n Engine
 ```bash
 kubectl apply -f gitops/apps/n8n.yaml
 kubectl get ingress -n n8n-system --watch
@@ -145,36 +157,29 @@ kubectl get ingress -n n8n-system --watch
 ### 1. Acceso
 Copie el DNS generado en la Fase 5 (ADDRESS) y ábralo en su navegador.
 
-### 2. Setup
-Complete el registro inicial de n8n.
-
-### 3. Creación del Workflow
+### 2. Creación del Workflow
 - Haga clic en **"Create your first workflow"**.
 - Añada el nodo **Webhook**. Configure:
   - **HTTP Method:** GET
-  - **Path:** test-conex
-  - **Authentication:** None
-- En el panel derecho del nodo, cambie **"Respond"** a **"Using 'Respond to Webhook' Node"**.
-- Añada el nodo **Respond to Webhook**. En **"Response Body"**, seleccione JSON y pegue:
+  - **Respond:** "Using 'Respond to Webhook' Node"
+- Añada el nodo **Respond to Webhook**. En **"Response Body"**, pegue:
 ```json
-  {"mensaje": "¡Hola Jose! Cluster VIVO 🤖🚀", "db_status": "connected"}
+  {"mensaje": "¡Hola Jose! Cluster VIVO 🤖🚀", "db_status": "connected", "gitops": "active"}
 ```
 
-### 4. Ejecución
-- Presione el botón **"Execute Workflow"**.
+### 3. Ejecución y Validación Real
+- Presione **"Execute Workflow"**.
 - Copie la **"Test URL"** del nodo Webhook.
-- **IMPORTANTE:** Reemplace `http://localhost:5678` por su DNS de AWS (ej: `k8s-n8nsyste-...elb.amazonaws.com`).
-
-### 5. Resultado
-Si el navegador muestra el JSON, el tráfico fluye perfectamente por todo el cluster.
+- **IMPORTANTE:** Reemplace `http://localhost:5678` por su **DNS ADDRESS de AWS** en la barra de direcciones.
+- Si visualiza el JSON, el tráfico fluye perfectamente por el Ingress hasta el contenedor.
 
 ---
 
 ## 💀 Fase 7: Protocolo de Destrucción Forense
-**Objetivo:** Limpieza total para evitar cargos residuales.
+**Objetivo:** Limpieza total para evitar cargos residuales de AWS.
 ```bash
 kubectl delete ingress --all -A
-kubectl delete ns n8n-system
+kubectl delete ns n8n-system argocd
 cd iac/live/dev/eks && terragrunt destroy -auto-approve
 cd ../vpc && terragrunt destroy -auto-approve
 ./scripts/nuke_backend_smart.sh
