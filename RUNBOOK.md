@@ -219,22 +219,38 @@ Copie el DNS generado en la Fase 5 (columna ADDRESS) y ábralo en su navegador.
 ---
 
 ## 💀 Fase 7: Protocolo de Destrucción Forense
-**Objetivo:** Limpieza total para evitar cargos residuales en la cuenta de AWS. Es fundamental seguir este orden.
+**Objetivo:** Limpieza total y garantizada de recursos para llevar el costo de AWS a $0.00. 
+
+> [!IMPORTANT]
+> El orden de ejecución es crítico para evitar recursos huérfanos que impiden el borrado de la VPC.
 
 ```bash
-# 1. Eliminar el Ingress para liberar el balanceador físico de AWS
+# 1. ELIMINACIÓN DE TRÁFICO (Capa 7)
+# Elimina el Ingress para que AWS empiece a liberar el Load Balancer (ALB)
 kubectl delete ingress --all -A
 
-# 2. Destruir infraestructura de cómputo y red con Terragrunt
-cd iac/live/dev/eks && terragrunt destroy -auto-approve
-cd ../vpc && terragrunt destroy -auto-approve
+# 2. LIMPIEZA DE IDENTIDADES Y LOGS (FinOps)
+# Borra logs de CloudWatch y roles IAM manuales detectados por la auditoría
+./scripts/nuke_zombies.sh
 
-# 3. Eliminar el almacenamiento de estado S3 y DynamoDB
+# 3. DESTRUCCIÓN DE CÓMPUTO (Capa 4)
+# Elimina los nodos de trabajo y el clúster EKS
+cd iac/live/dev/eks
+terragrunt destroy -auto-approve
+
+# 4. DESTRUCCIÓN DE RED (Capa 2-3)
+# Elimina la VPC, NAT Gateway y Elastic IPs (Solo tras borrar el EKS)
+cd ../vpc
+terragrunt destroy -auto-approve
+
+# 5. ELIMINACIÓN DE ESTADO (Cerebro de Infra)
+# Elimina el Bucket S3 y la Tabla DynamoDB de Terraform
+cd ../../../
 ./scripts/nuke_backend_smart.sh
+
+# 6. AUDITORÍA FINAL DE CONFIRMACIÓN
+# Ejecuta el bloque de auditoría para certificar el estado $0.00
+./scripts/audit_finops_extreme.sh && ./scripts/audit_finops_ultimate.sh
 ```
-
 ---
-
-## 🏁 Fin del Laboratorio
-
-**Estado Final Esperado:** COSTO AWS = $0.00
+**Estado Final Esperado:** COSTO AWS = $0.00 🏁
