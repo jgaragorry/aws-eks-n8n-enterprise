@@ -7,7 +7,7 @@
 ![n8n](https://img.shields.io/badge/n8n-%23FF6D5A.svg?style=for-the-badge&logo=n8n&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
 
-Una arquitectura de referencia completa para desplegar **n8n** a nivel empresarial en AWS Elastic Kubernetes Service (EKS), utilizando **Terraform/Terragrunt** para la infraestructura como código (IaC) y **ArgoCD** para el despliegue continuo (GitOps).
+Desplegaremos un ecosistema n8n escalable y seguro en AWS bajo estándares de producciónUna aplicando una arquitectura de referencia completa con AWS Elastic Kubernetes Service (EKS), utilizando **Terraform/Terragrunt** para la infraestructura como código (IaC) y **ArgoCD** para el despliegue continuo (GitOps) y gobernanza financiera (FinOps) suite de auditoría forense para costo $0.00.
 
 ---
 
@@ -61,6 +61,14 @@ graph TD
 * **Networking Avanzado:** Integración nativa con AWS ALB Controller para Ingress.
 * **FinOps Ready:** Incluye scripts de destrucción forense ("Nuke Protocol") para garantizar costo $0 tras las pruebas.
 * **Seguridad IAM:** Uso de *IAM Roles for Service Accounts* (IRSA) para gestión de permisos sin credenciales estáticas.
+
+## Cómo se conectan las piezas:
+
+* **iac/** (El Cimiento): Terragrunt se usa para modularizar AWS. Aquí es donde naces con la red (VPC) y el músculo (EKS). Es el enfoque "Infrastructure First".
+
+* **gitops/** (El Cerebro): La separación en apps, infra y manifests sigue el estándar de ArgoCD. Permite que el clúster se "auto-gestione" leyendo los cambios en Git.
+
+* **scripts/** (El Control): Es la capa de seguridad y eficiencia. Aquí reside la capacidad de hacer un "Nuke" "Destrucción Total" controlada y certificar de no dejas rastro de costos.
 
 ---
 
