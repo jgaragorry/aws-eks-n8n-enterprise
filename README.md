@@ -7,7 +7,7 @@
 ![n8n](https://img.shields.io/badge/n8n-%23FF6D5A.svg?style=for-the-badge&logo=n8n&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
 
-Desplegaremos un ecosistema n8n escalable y seguro en AWS bajo estándares de producciónUna aplicando una arquitectura de referencia completa con AWS Elastic Kubernetes Service (EKS), utilizando **Terraform/Terragrunt** para la infraestructura como código (IaC) y **ArgoCD** para el despliegue continuo (GitOps) y gobernanza financiera (FinOps) suite de auditoría forense para costo $0.00.
+Desplegaremos un ecosistema n8n escalable y seguro en AWS bajo estándares de producción aplicando una arquitectura de referencia completa con AWS Elastic Kubernetes Service (EKS), utilizando **Terraform/Terragrunt** para la infraestructura como código (IaC) y **ArgoCD** para el despliegue continuo (GitOps) y gobernanza financiera (FinOps) suite de auditoría forense para costo $0.00.
 
 ---
 
