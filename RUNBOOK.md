@@ -78,6 +78,7 @@ aws eks update-kubeconfig --name eks-gitops-dev --region us-east-1
 ## 🏗️ Fase 4: Plataforma (Identidad y Tráfico)
 **Objetivo:** Establecer una relación de confianza criptográfica entre AWS y Kubernetes para que el controlador pueda gestionar recursos físicos (ALB) sin usar credenciales estáticas.
 
+
 ### 4.1: Activación de la Relación de Confianza (OIDC)
 Este paso crea un proveedor de identidad en AWS que permite al clúster EKS hablar con IAM.
 
@@ -114,18 +115,24 @@ Este es el paso donde unimos ambos mundos. Creamos un Service Account en Kuberne
 
 ### 4.4: Monitoreo Visual (ArgoCD)
 Una vez asegurada la plataforma, habilitamos el túnel para la gestión de aplicaciones.
-1.  **Contraseña Admin:**
+1.  **Instalación de ArgoCD:** Primero, creamos el espacio de nombres e instalamos los componentes oficiales:
     ```bash
-    kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+    kubectl create namespace argocd
+    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
     ```
-2.  **Túnel:**
+2.  **Obtención de Credenciales:** ArgoCD genera una contraseña aleatoria durante la instalación. La recuperamos del secreto de Kubernetes:
+```bash
+  kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+```
+3.  **Habilitación del Túnel (Port-Forward):** Para acceder a la consola desde nuestro navegador local, redirigimos el tráfico del servicio:
 ```bash
   kubectl port-forward svc/argocd-server -n argocd 8080:443
 ```
-**Nota:** Ejecute el túnel en una terminal separada o añada & al final para enviarlo al fondo (aunque lo más profesional es dejar una terminal dedicada para ver los logs del tráfico).
+**Nota profesional:** Mantenga esta terminal abierta para monitorear los logs de acceso. Para continuar trabajando, abra una nueva pestaña en su terminal.
 
-3.  Abra `https://localhost:8080` e ingrese con usuario `admin`.
-
+4.  **Acceso Web:** Abra su navegador en https://localhost:8080.
+Usuario: admin
+Contraseña: (La obtenida en el paso 2)
 ---
 
 ## 🚀 Fase 5: Despliegue de Aplicación (Full GitOps)
