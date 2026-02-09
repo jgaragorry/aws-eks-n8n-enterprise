@@ -116,6 +116,12 @@ Crea el Service Account y el Rol de IAM vinculados. Este es el "pasaporte" del c
     kubectl port-forward svc/argocd-server -n argocd 8080:443
     ```
 3.  **URL de Acceso:** Abra `https://localhost:8080` e ingrese con usuario `admin`.
+**⚠️ Nota de Seguridad en el Navegador:** Al acceder vía https a localhost, el navegador mostrará una advertencia de "Conexión no privada" o "Certificado no válido". Esto es normal porque ArgoCD usa un certificado auto-firmado. Simplemente haz clic en "Configuración avanzada" y luego en "Acceder a localhost (sitio no seguro)".
+
+4.  **Obtener Contraseña de Administrador:** ArgoCD genera una contraseña aleatoria durante la instalación y la guarda en un secreto cifrado. Ejecuta esto para verla en texto plano:
+    ```bash
+   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+    ```
 
 ---
 
