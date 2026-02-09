@@ -118,7 +118,7 @@ Una vez asegurada la plataforma, habilitamos el túnel para la gestión de aplic
 1.  **Instalación de ArgoCD:** Primero, creamos el espacio de nombres e instalamos los componentes oficiales:
     ```bash
     kubectl create namespace argocd
-    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --server-side
     ```
 2.  **Obtención de Credenciales:** ArgoCD genera una contraseña aleatoria durante la instalación. La recuperamos del secreto de Kubernetes:
 ```bash
