@@ -76,36 +76,52 @@ aws eks update-kubeconfig --name eks-gitops-dev --region us-east-1
 ---
 
 ## 🏗️ Fase 4: Plataforma (Identidad y Tráfico)
-**Objetivo:** Configurar la seguridad de identidad (OIDC) y los permisos de IAM para que el clúster pueda crear recursos en AWS automáticamente (como el Load Balancer).
+**Objetivo:** Establecer una relación de confianza criptográfica entre AWS y Kubernetes para que el controlador pueda gestionar recursos físicos (ALB) sin usar credenciales estáticas.
 
-### 4.1: Vinculación OIDC
+### 4.1: Activación de la Relación de Confianza (OIDC)
+Este paso crea un proveedor de identidad en AWS que permite al clúster EKS hablar con IAM.
+
 ```bash
 eksctl utils associate-iam-oidc-provider --cluster eks-gitops-dev --approve
 ```
 
-### 4.2: Inyección de Permisos IAM (Paso Crítico)
-**Vital:** Sin este paso, el controlador de AWS Load Balancer no tendrá permiso para crear el balanceador físico. Esto soluciona el error donde el Ingress se queda sin dirección IP (ADDRESS vacío).
+### 4.2: Definición de Permisos (Política de IAM)
+Se registra en AWS la "lista de acciones permitidas" (crear ALB, borrar subredes, etc.) que el controlador necesita.
 
 ```bash
-cd ../../../
-# Descargar la política oficial de Amazon para el Load Balancer Controller
-curl -o iam_policy.json [https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json](https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json)
+cd ../../../../
 
-# Adjuntar la política al rol de IAM del controlador
-aws iam put-role-policy --role-name AmazonEKSLoadBalancerControllerRole --policy-name ALBControllerPolicy --policy-document file://iam_policy.json
+aws iam create-policy \
+    --policy-name AWSLoadBalancerControllerIAMPolicy \
+    --policy-document file://iam_policy.json
+
 ```
 
-### 4.3: Acceso a Consola GitOps (ArgoCD)
-**Objetivo:** Monitorear visualmente la salud de las aplicaciones.
-1.  **Obtener Contraseña Admin:**
+### 4.3: Inyección de Identidad (Service Account + IRSA)
+Este es el paso donde unimos ambos mundos. Creamos un Service Account en Kubernetes y un Rol de IAM en AWS al mismo tiempo.
+
+    ```bash
+    eksctl create iamserviceaccount \
+  --cluster=eks-gitops-dev \
+  --region=us-east-1 \
+  --namespace=kube-system \
+  --name=aws-load-balancer-controller \
+  --role-name AmazonEKSLoadBalancerControllerRole \
+  --attach-policy-arn=arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):policy/AWSLoadBalancerControllerIAMPolicy \
+  --approve
+    ```
+
+### 4.4: Monitoreo Visual (ArgoCD)
+Una vez asegurada la plataforma, habilitamos el túnel para la gestión de aplicaciones.
+1.  **Contraseña Admin:**
     ```bash
     kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
     ```
-2.  **Habilitar Túnel (Port-Forward):**
-    ```bash
-    kubectl port-forward svc/argocd-server -n argocd 8080:443
-    ```
-3.  **URL de Acceso:** Abra `https://localhost:8080` e ingrese con usuario `admin`.
+2.  **Túnel:**
+```bash
+  kubectl port-forward svc/argocd-server -n argocd 8080:443
+```
+3.  Abra `https://localhost:8080` e ingrese con usuario `admin`.
 
 ---
 
