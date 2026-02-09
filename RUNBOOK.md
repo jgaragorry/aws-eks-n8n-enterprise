@@ -1,14 +1,14 @@
 # 🚀 RUNBOOK MASTER: Despliegue n8n Enterprise en AWS EKS
 
 ![Status](https://img.shields.io/badge/STATUS-PRODUCCIÓN-success?style=for-the-badge&logo=checkmarx)
-![Version](https://img.shields.io/badge/VERSION-5.0.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/VERSION-6.0.0-blue?style=for-the-badge)
 ![FinOps](https://img.shields.io/badge/FINOPS-CERTIFIED-red?style=for-the-badge&logo=moneygram)
 ![AWS](https://img.shields.io/badge/AWS-EKS-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![GitOps](https://img.shields.io/badge/GITOPS-ARGOCD-orange?style=for-the-badge&logo=argo)
 
 **Autor:** Jose Garagorry & Gemini AI | **Nivel:** Enterprise Arch
 
-**Propósito:** Este documento sirve como guía definitiva para el despliegue de una infraestructura GitOps escalable. Está diseñado para ser ejecutado de forma secuencial, garantizando que incluso un técnico sin experiencia previa pueda levantar el entorno n8n Enterprise con persistencia de datos y conectividad pública en AWS.
+**Propósito:** Guía definitiva para el despliegue de infraestructura GitOps escalable. Ejecución secuencial garantizada para n8n Enterprise con persistencia y conectividad pública en AWS.
 
 ---
 
@@ -17,18 +17,18 @@
 2. [Fase 1: Backend de Estado (Terragrunt)](#fase-1-backend-de-estado)
 3. [Fase 2: Infraestructura de Red (VPC)](#fase-2-infraestructura-de-red-vpc)
 4. [Fase 3: Cómputo (Cluster EKS)](#fase-3-cómputo-cluster-eks)
-5. [Fase 4: Plataforma (Identidad y Seguridad)](#fase-4-plataforma-identidad-y-seguridad)
-6. [Fase 5: Tráfico y GitOps (ALB & ArgoCD)](#fase-5-tráfico-y-gitops)
+5. [Fase 4: Plataforma (Identidad y Seguridad IRSA)](#fase-4-plataforma-identidad-y-seguridad)
+6. [Fase 5: Controladores (ALB & ArgoCD)](#fase-5-controladores-alb--argocd)
 7. [Fase 6: Despliegue de Aplicación (GitOps n8n + DB)](#fase-6-despliegue-de-aplicación-n8n)
-8. [Fase 7: La Prueba de Fuego (Validación Webhook)](#fase-7-la-prueba-de-fuego-webhook-test)
-9. [Fase 8: Protocolo de Destrucción Forense](#fase-8-protocolo-de-destrucción-forense)
+8. [Fase 7: La Prueba de Fuego (Validación Visual AWS)](#fase-7-la-prueba-de-fuego-validación-visual)
+9. [Fase 8: Protocolo de Destrucción Total ($0.00)](#fase-8-protocolo-de-destrucción-total)
 
 ---
 
 ## 🛠️ Fase 0: Preparación del Entorno
-**Objetivo:** Instalar las herramientas necesarias para la gestión del clúster y la autenticación con AWS.
+**Objetivo:** Instalar herramientas necesarias para gestión del clúster y autenticación con AWS.
 ```bash
-# Instalación de eksctl para gestión de OIDC e IAM Roles
+# Instalación de eksctl y aws-cli
 curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
 sudo mv /tmp/eksctl /usr/local/bin
 eksctl version
@@ -68,22 +68,22 @@ aws eks update-kubeconfig --name eks-gitops-dev --region us-east-1
 ---
 
 ## 🏗️ Fase 4: Plataforma (Identidad y Seguridad)
-**Objetivo:** Establecer la confianza (IRSA) para que los Pods gestionen recursos de AWS.
+**Objetivo:** Vincular IAM con Kubernetes para permisos dinámicos mediante IRSA.
 
 ### 4.1: Activación de OIDC
 ```bash
 eksctl utils associate-iam-oidc-provider --cluster eks-gitops-dev --approve
 ```
 
-### 4.2: Registro de Política de IAM
+### 4.2: Registro de Política IAM (ALB)
 ```bash
-# Asegurarse de estar en la raíz del proyecto para usar el archivo json
+cd ~/aws-eks-n8n-enterprise/
 aws iam create-policy \
     --policy-name AWSLoadBalancerControllerIAMPolicy \
     --policy-document file://iam_policy.json
 ```
 
-### 4.3: Creación de Service Account (Identidad del Controlador)
+### 4.3: Inyección de Identidad (IRSA)
 ```bash
 eksctl create iamserviceaccount \
   --cluster=eks-gitops-dev \
@@ -97,10 +97,10 @@ eksctl create iamserviceaccount \
 
 ---
 
-## 🚦 Fase 5: Tráfico y GitOps (Controladores)
-**Objetivo:** Instalar el software que materializa la infraestructura y el despliegue.
+## 🚦 Fase 5: Controladores (ALB & ArgoCD)
+**Objetivo:** Instalar software que materializa la infraestructura y el despliegue.
 
-### 5.1: Instalación del AWS Load Balancer Controller
+### 5.1: Instalación AWS Load Balancer Controller
 ```bash
 helm repo add eks https://aws.github.io/eks-charts
 helm repo update
@@ -112,13 +112,13 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   --set serviceAccount.name=aws-load-balancer-controller
 ```
 
-### 5.2: Despliegue de ArgoCD
+### 5.2: Instalación de ArgoCD (Optimizado)
 ```bash
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --server-side --force-conflicts
 ```
 
-### 5.3: Acceso a la Consola ArgoCD
+### 5.3: Credenciales y Acceso
 
 **Obtener Contraseña:**
 ```bash
@@ -136,121 +136,77 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 ## 🚀 Fase 6: Despliegue de Aplicación (n8n Enterprise)
 
-### 6.1: Preparación del Entorno n8n
+### 6.1: Namespace y Base de Datos
 ```bash
 kubectl create namespace n8n-system
-```
-
-### 6.2: Despliegue de Base de Datos (PostgreSQL)
-```bash
-cat <<EOF > gitops/apps/database.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: n8n-database-postgresql
-  namespace: n8n-system
-spec:
-  ports:
-    - port: 5432
-  selector:
-    app: n8n-postgres
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: n8n-postgres
-  namespace: n8n-system
-spec:
-  selector:
-    matchLabels:
-      app: n8n-postgres
-  template:
-    metadata:
-      labels:
-        app: n8n-postgres
-    spec:
-      containers:
-        - name: postgres
-          image: postgres:13
-          env:
-            - name: POSTGRES_USER
-              value: "n8n_user"
-            - name: POSTGRES_PASSWORD
-              value: "StrongPassword123!"
-            - name: POSTGRES_DB
-              value: "n8n_db"
-          ports:
-            - containerPort: 5432
-EOF
-
 kubectl apply -f gitops/apps/database.yaml
 ```
 
-### 6.3: Despliegue de Motor n8n e Ingress
-
-**Nota:** Hemos incluido `ingressClassName: alb` para asegurar la detección inmediata por parte del controlador.
+### 6.2: Registro de App en ArgoCD
 ```bash
-cat <<EOF > gitops/apps/n8n.yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: n8n-ingress
-  namespace: n8n-system
-  annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /healthz
-spec:
-  ingressClassName: alb
-  rules:
-    - http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: n8n
-                port:
-                  number: 80
-EOF
+kubectl apply -f gitops/apps/argocd-app-n8n.yaml
+```
 
+### 6.3: Despliegue de n8n e Ingress Class
+```bash
 kubectl apply -f gitops/apps/n8n.yaml
-
-# Verificación de IP Pública
 kubectl get ingress -n n8n-system --watch
 ```
 
 ---
 
-### 💡 ¿Qué cambió para ser un Runbook "limpio"?
+## 🍒 Fase 7: La Prueba de Fuego (Validación Visual)
 
-1. **Inclusión del Namespace:** El `kubectl create namespace n8n-system` ya es un paso formal en la Fase 6.1.
-2. **IngressClassName nativo:** En lugar de parchar con `kubectl patch`, el comando `cat` de la Fase 6.3 ya incluye `ingressClassName: alb`. Así, el recurso nace configurado correctamente.
-3. **Orden de Helm:** La Fase 5.1 garantiza que el controlador esté listo **antes** de que intentes desplegar aplicaciones.
-
----
-
-## 🍒 Fase 7: La Prueba de Fuego (Webhook Test)
-
-1. Copie el ADDRESS del Ingress.
-2. Cree un flujo en n8n con un nodo Webhook.
-3. Reemplace localhost:5678 por el DNS de AWS y valide la respuesta JSON.
+**Configurar Webhook:**
+1. En n8n, usar Respond to Webhook Node con tipo `text/html`.
+2. Body: Pegar el HTML con estilo AWS (Fondo #232f3e, Header #ff9900).
+3. Validar: Acceder a `http://<ALB-ADDRESS>/webhook-test/aws-test`.
 
 ---
 
-## 💀 Fase 8: Protocolo de Destrucción Forense
+## 💀 Fase 8: Protocolo de Destrucción Total ($0.00)
+
+**⚠️ IMPORTANTE:** El orden es crítico para evitar bloqueos de red por recursos activos.
+
+### 8.1: Nuke de Capa de Aplicación (Tráfico)
+
+Elimina balanceadores y evita que la VPC quede "atrapada" por dependencias de red.
 ```bash
 ./scripts/nuke_loadbalancers.sh
+```
 
+### 8.2: Nuke de Infraestructura (Cómputo y Red)
+
+Destrucción atómica de EKS, Nodos y VPC.
+```bash
 ./scripts/clean_project_v2.sh
+```
 
+### 8.3: Nuke de Estado (Backend)
+
+Elimina el rastro de Terragrunt en S3 y DynamoDB.
+```bash
 ./scripts/nuke_backend_smart.sh
+```
 
+### 8.4: Auditoría Final de Costos
+```bash
 ./scripts/audit_finops_extreme.sh
 ```
 
 ---
 
-## 📝 Notas Finales
+## 🔐 Notas de Seguridad para el Video
 
-Este runbook es una guía completa y secuencial para el despliegue de n8n Enterprise en AWS EKS con GitOps mediante ArgoCD. Sigue cada fase en orden para garantizar una implementación exitosa.
+* **Fase 4:** Si repites comandos, los errores `AlreadyExists` son confirmaciones de éxito.
+* **Fase 8:** El script `nuke_loadbalancers.sh` es tu mejor amigo; ejecútalo **siempre primero** para que `terragrunt destroy` no falle al intentar borrar la VPC.
+
+---
+
+## 📝 Resumen de Cambios
+
+- ✅ Versión consolidada (6.0.0) con todas las fases integradas
+- ✅ Orden secuencial garantizado
+- ✅ Instrucciones claras y limpias
+- ✅ Notas de seguridad y errores comunes incluidas
+- ✅ Protocolo de destrucción optimizado para evitar costos
