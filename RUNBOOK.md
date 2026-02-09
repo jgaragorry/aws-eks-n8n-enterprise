@@ -100,7 +100,7 @@ aws iam create-policy \
 ### 4.3: Inyección de Identidad (Service Account + IRSA)
 Este es el paso donde unimos ambos mundos. Creamos un Service Account en Kubernetes y un Rol de IAM en AWS al mismo tiempo.
 
-    ```bash
+```bash
     eksctl create iamserviceaccount \
   --cluster=eks-gitops-dev \
   --region=us-east-1 \
@@ -109,7 +109,8 @@ Este es el paso donde unimos ambos mundos. Creamos un Service Account en Kuberne
   --role-name AmazonEKSLoadBalancerControllerRole \
   --attach-policy-arn=arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):policy/AWSLoadBalancerControllerIAMPolicy \
   --approve
-    ```
+
+```
 
 ### 4.4: Monitoreo Visual (ArgoCD)
 Una vez asegurada la plataforma, habilitamos el túnel para la gestión de aplicaciones.
