@@ -75,31 +75,30 @@ aws eks update-kubeconfig --name eks-gitops-dev --region us-east-1
 
 ---
 
-## 🏗️ Fase 4: Plataforma (Identidad y Tráfico)
-**Objetivo:** Establecer una relación de confianza criptográfica entre AWS y Kubernetes para que el controlador pueda gestionar recursos físicos (ALB) sin usar credenciales estáticas.
+## 🏗️ Fase 4: Plataforma (Identidad y Seguridad)
+**Objetivo:** Establecer la confianza criptográfica entre AWS e IAM para permitir la gestión automática de recursos.
 
-
-### 4.1: Activación de la Relación de Confianza (OIDC)
-Este paso crea un proveedor de identidad en AWS que permite al clúster EKS hablar con IAM.
-
+### 4.1: Activación de OIDC (Trust Relationship)
+Crea un proveedor de identidad para que el clúster pueda solicitar roles de IAM.
 ```bash
 eksctl utils associate-iam-oidc-provider --cluster eks-gitops-dev --approve
 ```
 
-### 4.2: Definición de Permisos (Política de IAM)
-Se registra en AWS la "lista de acciones permitidas" (crear ALB, borrar subredes, etc.) que el controlador necesita.
+### 4.2: Registro de Permisos (IAM Policy)
+Registra la política que permite al controlador gestionar el balanceador de carga.
 
 ```bash
-cd ../../../../
 
+# Asegurarse de estar en la raíz del proyecto para encontrar el json
+cd ~/aws-eks-n8n-enterprise/
 aws iam create-policy \
     --policy-name AWSLoadBalancerControllerIAMPolicy \
     --policy-document file://iam_policy.json
 
 ```
 
-### 4.3: Inyección de Identidad (Service Account + IRSA)
-Este es el paso donde unimos ambos mundos. Creamos un Service Account en Kubernetes y un Rol de IAM en AWS al mismo tiempo.
+### 4.3: Inyección de Identidad (IRSA)
+Crea el Service Account y el Rol de IAM vinculados. Este es el "pasaporte" del controlador.
 
 ```bash
     eksctl create iamserviceaccount \
@@ -111,28 +110,13 @@ Este es el paso donde unimos ambos mundos. Creamos un Service Account en Kuberne
   --attach-policy-arn=arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):policy/AWSLoadBalancerControllerIAMPolicy \
   --approve
 
-```
-
-### 4.4: Monitoreo Visual (ArgoCD)
-Una vez asegurada la plataforma, habilitamos el túnel para la gestión de aplicaciones.
-1.  **Instalación de ArgoCD:** Primero, creamos el espacio de nombres e instalamos los componentes oficiales:
+ ```
+2.  **Habilitar Túnel (Port-Forward):**
     ```bash
-    kubectl create namespace argocd
-    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --server-side
+    kubectl port-forward svc/argocd-server -n argocd 8080:443
     ```
-2.  **Obtención de Credenciales:** ArgoCD genera una contraseña aleatoria durante la instalación. La recuperamos del secreto de Kubernetes:
-```bash
-  kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
-```
-3.  **Habilitación del Túnel (Port-Forward):** Para acceder a la consola desde nuestro navegador local, redirigimos el tráfico del servicio:
-```bash
-  kubectl port-forward svc/argocd-server -n argocd 8080:443
-```
-**Nota profesional:** Mantenga esta terminal abierta para monitorear los logs de acceso. Para continuar trabajando, abra una nueva pestaña en su terminal.
+3.  **URL de Acceso:** Abra `https://localhost:8080` e ingrese con usuario `admin`.
 
-4.  **Acceso Web:** Abra su navegador en https://localhost:8080.
-Usuario: admin
-Contraseña: (La obtenida en el paso 2)
 ---
 
 ## 🚀 Fase 5: Despliegue de Aplicación (Full GitOps)
