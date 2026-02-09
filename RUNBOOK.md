@@ -122,6 +122,8 @@ Una vez asegurada la plataforma, habilitamos el túnel para la gestión de aplic
 ```bash
   kubectl port-forward svc/argocd-server -n argocd 8080:443
 ```
+**Nota:** Ejecute el túnel en una terminal separada o añada & al final para enviarlo al fondo (aunque lo más profesional es dejar una terminal dedicada para ver los logs del tráfico).
+
 3.  Abra `https://localhost:8080` e ingrese con usuario `admin`.
 
 ---
