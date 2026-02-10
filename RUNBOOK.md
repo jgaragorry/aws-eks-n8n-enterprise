@@ -8,7 +8,7 @@
 
 **Autor:** Jose Garagorry & Gemini AI | **Nivel:** Enterprise Arch
 
-**Propósito:** Este documento es la única fuente de verdad para el despliegue de n8n Enterprise. Está diseñado para ser ejecutado de forma secuencial. No omita ningún paso; cada comando prepara el entorno para el siguiente.
+**Propósito:** Guía definitiva y secuencial para el despliegue y destrucción de n8n Enterprise. No omita pasos ni altere el orden. Cada comando ha sido validado para garantizar una infraestructura funcional, persistente y una destrucción total segura.
 
 ---
 
@@ -17,28 +17,27 @@
 2. [Fase 1: Backend de Estado (Terragrunt)](#fase-1-backend-de-estado)
 3. [Fase 2: Infraestructura de Red (VPC)](#fase-2-infraestructura-de-red-vpc)
 4. [Fase 3: Cómputo (Cluster EKS)](#fase-3-cómputo-cluster-eks)
-5. [Fase 4: Identidad y Seguridad (IRSA)](#fase-4-plataforma-identidad-y-seguridad)
-6. [Fase 5: Controladores de Plataforma (ALB & ArgoCD)](#fase-5-controladores-plataforma)
-7. [Fase 6: Despliegue de Aplicación (n8n + PostgreSQL)](#fase-6-despliegue-de-aplicación)
-8. [Fase 7: Validación Visual (Landing Page AWS)](#fase-7-validación-visual)
-9. [Fase 8: Protocolo de Destrucción Total ($0.00)](#fase-8-protocolo-de-destrucción)
+5. [Fase 4: Identidad y Seguridad (IRSA)](#fase-4-identidad-y-seguridad-irsa)
+6. [Fase 5: Controladores de Plataforma (ALB & ArgoCD)](#fase-5-controladores-de-plataforma-alb--argocd)
+7. [Fase 6: Despliegue de Aplicación (n8n + PostgreSQL)](#fase-6-despliegue-de-aplicación-n8n--postgresql)
+8. [Fase 7: Configuración de Validación Visual (HTML)](#fase-7-configuración-de-validación-visual-html)
+9. [Fase 8: Protocolo de Destrucción Total ($0.00)](#fase-8-protocolo-de-destrucción-total-000)
 
 ---
 
 ## 🛠️ Fase 0: Preparación del Entorno
 ```bash
-# Instalación de eksctl
+# Instalación de eksctl para gestión de clúster
 curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
 sudo mv /tmp/eksctl /usr/local/bin
 
-# Verificación de credenciales AWS
+# Verificación de credenciales de administrador AWS
 aws sts get-caller-identity
 ```
 
 ---
 
 ## 📦 Fase 1: Backend de Estado
-**Objetivo:** Configurar S3 y DynamoDB para el estado de Terragrunt.
 ```bash
 ./scripts/setup_backend.sh
 ./scripts/check_backend.sh
@@ -58,30 +57,25 @@ terragrunt apply -auto-approve
 ```bash
 cd ../eks
 terragrunt apply -auto-approve
-
-# Sincronización de acceso local
 aws eks update-kubeconfig --name eks-gitops-dev --region us-east-1
 ```
 
 ---
 
 ## 🏗️ Fase 4: Identidad y Seguridad (IRSA)
-**Objetivo:** Permitir que Kubernetes gestione recursos físicos de AWS.
 
-### 4.1: Activación de Proveedor OIDC
+### 4.1: Activación de OIDC
 ```bash
 eksctl utils associate-iam-oidc-provider --cluster eks-gitops-dev --approve
 ```
 
-### 4.2: Creación de Política de Permisos
+### 4.2: Registro de Política IAM (ALB)
 ```bash
 cd ~/aws-eks-n8n-enterprise/
-aws iam create-policy \
-    --policy-name AWSLoadBalancerControllerIAMPolicy \
-    --policy-document file://iam_policy.json
+aws iam create-policy --policy-name AWSLoadBalancerControllerIAMPolicy --policy-document file://iam_policy.json
 ```
 
-### 4.3: Creación de Service Account (Vínculo IAM-K8s)
+### 4.3: Inyección de Identidad (Service Account)
 ```bash
 eksctl create iamserviceaccount \
   --cluster=eks-gitops-dev \
@@ -97,32 +91,27 @@ eksctl create iamserviceaccount \
 
 ## 🚦 Fase 5: Controladores de Plataforma (ALB & ArgoCD)
 
-### 5.1: Instalación de AWS Load Balancer Controller
+### 5.1: Instalación AWS Load Balancer Controller
 ```bash
 helm repo add eks https://aws.github.io/eks-charts
 helm repo update
-
-helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
-  -n kube-system \
-  --set clusterName=eks-gitops-dev \
-  --set serviceAccount.create=false \
-  --set serviceAccount.name=aws-load-balancer-controller
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller -n kube-system --set clusterName=eks-gitops-dev --set serviceAccount.create=false --set serviceAccount.name=aws-load-balancer-controller
 ```
 
-### 5.2: Instalación de ArgoCD (Modo Server-Side)
+### 5.2: Instalación de ArgoCD
 ```bash
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --server-side --force-conflicts
 ```
 
-### 5.3: Recuperación de Credenciales y Acceso
+### 5.3: Acceso
 
 **Obtener Password:**
 ```bash
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
 ```
 
-**Abrir Túnel:**
+**Iniciar Túnel:**
 ```bash
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 ```
@@ -131,17 +120,11 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 ---
 
-## 🚀 Fase 6: Despliegue de Aplicación
+## 🚀 Fase 6: Despliegue de Aplicación (n8n + PostgreSQL)
 
-### 6.1: Creación de Namespaces
+### 6.1: Creación de Namespace y Base de Datos
 ```bash
 kubectl create namespace n8n-system
-```
-
-### 6.2: Componente: Base de Datos PostgreSQL
-
-**Paso 1: Generar Manifiesto**
-```bash
 cat <<EOF > gitops/apps/database.yaml
 apiVersion: v1
 kind: Service
@@ -182,10 +165,7 @@ spec:
             - containerPort: 5432
 EOF
 kubectl apply -f gitops/apps/database.yaml
-```
 
-**Paso 2: Registrar en ArgoCD**
-```bash
 kubectl apply -f - <<EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -210,9 +190,7 @@ spec:
 EOF
 ```
 
-### 6.3: Componente: Motor n8n e Ingress
-
-**Paso 1: Generar Manifiesto (con IngressClassName corregido)**
+### 6.2: Motor n8n e Ingress
 ```bash
 cat <<EOF > gitops/apps/n8n.yaml
 apiVersion: networking.k8s.io/v1
@@ -238,10 +216,7 @@ spec:
                   number: 80
 EOF
 kubectl apply -f gitops/apps/n8n.yaml
-```
 
-**Paso 2: Registrar en ArgoCD**
-```bash
 kubectl apply -f - <<EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -266,53 +241,135 @@ spec:
 EOF
 ```
 
-**Paso 3: Obtener URL Pública**
-```bash
-kubectl get ingress -n n8n-system --watch
-```
-
 ---
 
-## 🍒 Fase 7: Validación Visual (Landing Page AWS)
+## 🎨 Fase 7: Configuración de Validación Visual (HTML)
 
-Ingrese a n8n mediante el DNS obtenido en la Fase 6.
+### 7.1: Configuración en n8n
 
-Configure el nodo Respond to Webhook con:
+**Nodo Webhook:**
+- Respond: Cambiar a Using Respond to Webhook Node.
 
-- **Respond With:** Text
-- **Headers:** Content-Type: text/html
-- **Body:** Pegue el código HTML con el tema oscuro de AWS.
+**Nodo Respond to Webhook:**
+- Respond With: Text.
+- Options (Header): Content-Type: text/html.
 
-Pruebe la URL: `http://<ALB-DNS>/webhook-test/aws-test`
+**Response Body:** Copie y pegue el siguiente código:
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            background-color: #232f3e; /* Gris Calama AWS */
+            color: #ffffff;
+            font-family: 'Amazon Ember', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .card {
+            background-color: #1a1a1a; /* Negro profundo */
+            padding: 3rem;
+            border-radius: 8px;
+            border-top: 5px solid #ff9900; /* Naranja AWS */
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            max-width: 600px;
+        }
+        h1 {
+            color: #ff9900; /* Ocre AWS */
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+        }
+        p {
+            font-size: 1.2rem;
+            color: #d5dbdb;
+            line-height: 1.6;
+        }
+        .badge {
+            background: #37474f;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="badge">● SISTEMA ONLINE</div>
+        <h1>¡HOLA JOSE! 🤖🚀</h1>
+        <p>El clúster <strong>EKS Enterprise</strong> está respondiendo correctamente a través del 
+           <strong>AWS Application Load Balancer</strong>.</p>
+        <p style="color: #ff9900;">Estado: GitOps Sincronizado vía ArgoCD</p>
+    </div>
+</body>
+</html>
+```
 
 ---
 
 ## 💀 Fase 8: Protocolo de Destrucción Total ($0.00)
 
-**ORDEN CRÍTICO:** No altere la secuencia para evitar recursos bloqueados.
+**IMPORTANTE:** Seguir este orden estrictamente para evitar bloqueos por dependencias de red.
 
-**Liberar Red:**
+### 8.1: Nuke de Capa Externa (Balanceadores)
 ```bash
-./scripts/nuke_loadbalancers.sh
+cd ~/aws-eks-n8n-enterprise/scripts
+./nuke_loadbalancers.sh
 ```
 
-**Eliminar Cómputo:**
+### 8.2: Desbloqueo Manual de Identidad (IAM)
+
+Previene el error DeleteConflict desvinculando la política antes de borrar el rol.
 ```bash
-./scripts/clean_project_v2.sh
+# 1. Obtener el ARN de la política
+POLICY_ARN=$(aws iam list-policies --query 'Policies[?PolicyName==`AWSLoadBalancerControllerIAMPolicy`].Arn' --output text)
+
+# 2. Desvincular política del rol
+aws iam detach-role-policy --role-name AmazonEKSLoadBalancerControllerRole --policy-arn $POLICY_ARN
+
+# 3. Eliminar Rol e IAM Policy
+aws iam delete-role --role-name AmazonEKSLoadBalancerControllerRole
+aws iam delete-policy --policy-arn $POLICY_ARN
 ```
 
-**Eliminar Estado:**
+### 8.3: Destrucción de Cómputo (EKS)
 ```bash
-./scripts/nuke_backend_smart.sh
+cd ~/aws-eks-n8n-enterprise/iac/live/dev/eks
+terragrunt destroy -auto-approve
 ```
 
-**Auditar:**
+### 8.4: Desbloqueo Manual y Destrucción de Red (VPC)
+
+Si Terragrunt se queda en "Still destroying", ejecute esto para liberar Interfaces de Red (ENIs).
 ```bash
-./scripts/audit_finops_extreme.sh
+VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=gitops-platform-dev-vpc" --query 'Vpcs[0].VpcId' --output text)
+
+# Borrar ENIs huérfanas
+ENIS=$(aws ec2 describe-network-interfaces --filters "Name=vpc-id,Values=$VPC_ID" --query 'NetworkInterfaces[*].NetworkInterfaceId' --output text)
+for eni in $ENIS; do echo "Liberando ENI: $eni"; aws ec2 delete-network-interface --network-interface-id $eni; done
+
+# Destrucción final de la VPC
+cd ~/aws-eks-n8n-enterprise/iac/live/dev/vpc
+terragrunt destroy -auto-approve
+```
+
+### 8.5: Limpieza de Estado y Auditoría FinOps Final
+```bash
+cd ~/aws-eks-n8n-enterprise/scripts
+./nuke_backend_smart.sh
+./audit_finops_extreme.sh
 ```
 
 ---
 
 ## 📝 Notas Finales
 
-Este documento ahora refleja exactamente la realidad técnica de tu clúster. No hay atajos: se crea el namespace antes de la DB, se define la clase `alb` en el Ingress desde el inicio y se separa la creación del manifiesto del registro en ArgoCD para máxima visibilidad.
+Este documento refleja exactamente la realidad técnica del clúster. Cada fase ha sido validada para garantizar despliegue exitoso y destrucción segura sin costos residuales.
